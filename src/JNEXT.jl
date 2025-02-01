@@ -1,5 +1,5 @@
 module JNEXT
-
-# Write your package code here.
-
+using Revise
+include("materials.jl")
+include("shapes.jl")
 end

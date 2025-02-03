@@ -107,10 +107,290 @@ md"""
 ### Add the two points
 """
 
+# ╔═╡ 86149e81-ed71-4c57-aeb8-fe525be4ad64
+md"""
+## Event analysis
+"""
+
+# ╔═╡ 8d1e1d84-a7d0-44e0-8ddf-2dc3b2f43add
+md"""
+- Average number of electrons for each SiPM
+"""
+
+# ╔═╡ 921e6046-ff59-43d2-a834-a74320331ef9
+md"""
+- Maximum number of electrons for each SiPM
+"""
+
+# ╔═╡ 2ceb0f10-33c1-45fc-a5a8-e456f481f3ac
+md"""
+- Sum of  all electrons for each SiPM
+"""
+
+# ╔═╡ 8fd4e626-f8f4-4541-b520-19fe8beeef1c
+begin
+	gg = 1e+3
+	eps = 0.3
+	PDE = 0.65 * 0.5 * 0.25  # TPB QE x geometry x PDE for S13360-25 Hamamatsu
+	ncl = 57600 # number of cells for S13360-25 Hamamatsu 
+	gt = gg * eps * PDE
+md"""
+### Electrons to photoelectrons
+- In the ELCC channel, each electron produces ``n_\gamma = g \times n_e`` where g is a gain
+- The ELCC channel has an optical efficiency ``\epsilon``
+- The SiPM has an effective PDE which depends on the SiPM type. 
+- Taking g =$(gg), epsilon = $(eps) and PDE = $(PDE), the total gain is $(gt)
+"""
+end
+
+# ╔═╡ dde3b9ff-3f28-49c8-b3cb-efe9f9827e85
+md"""
+## ELCC Algorithm
+"""
+
+# ╔═╡ df6e502e-7892-4158-bfb7-cc38214618a1
+md"""
+## Description of detector
+"""
+
+# ╔═╡ f7b2fbef-f189-4c4e-b7ce-ee46688d530d
+"""
+Range of an adc with nbits
+"""
+adcrange(nbits) = 2^nbits -1
+
+# ╔═╡ 4c58b596-9da3-4e31-ae3e-5acf18e206a4
+"""
+maximum number of pes for an ADC of nbits
+"""
+maxpes(nbits, adctopes) = adcrange(nbits)/adctopes
+
+# ╔═╡ ae4ae06f-a756-4cf6-94d0-d08dac29ed48
+begin
+	nbits = 13
+	adctopes = 11
+	mxp = round(maxpes(nbits, adctopes))
+md"""
+### Saturation
+- Using a SiPM of 25 μm pitch, SiPM does not saturate and there is enough light for good resolution. 
+- Instead, ADC saturation may become a problem.
+- Assuming an ADC of $(nbits) with a LSE (adc to pes) of $(adctopes) we obtain a maximum number of pes equal to $(mxp) 
+"""
+end
+
+# ╔═╡ a442b7d0-9035-48a9-bbce-98c66c09e05f
+"""
+Computes the fraction of SiPMs which have at least one saturated sample.
+- ts is the vector containing the time series with the number of pes per sipm
+- mxp is the maximum number of pes for a given adc
+- gt is the total gain 
+"""
+function fraction_saturated_sipm(ts,mxp,gt)
+	ns = 0
+	for spm in ts
+		npes = spm * gt 
+		if any(x -> x > mxp, npes) 
+			ns+=1
+		end
+	end	
+	return ns/length(ts)
+	
+end
+
 # ╔═╡ c446556a-239d-4e95-a3e7-3f7f3679e038
 md"""
 ## Functions
 """
+
+# ╔═╡ a01e9701-dce9-496e-85f9-cc511fb274ed
+function sumts(ts)
+	lx = length(ts[1])
+	vpes = zeros(lx)
+	
+	for (i, v) in enumerate(ts)
+		vpes = vpes .+ v
+	end
+	vpes
+end
+
+# ╔═╡ b9c13dfc-614d-4f95-9a71-8c3152a0c5fd
+"""
+Returns zxpes (a matrix of sipmx x tbins) and zypes (sipmy x tbins)
+"""
+function mat_hxz(hlx, ts)
+	lx = length(hlx[1,:])
+	px = Int(sqrt(lx))
+	xx = zeros(px)
+	yy = zeros(px)
+	tl = length(ts[1])
+	zxpes = zeros(px, tl)
+	zypes = zeros(px, tl)
+	
+	
+	for (i,k) in enumerate(1:px:lx)
+		#println("i =$(i), k = $(k)")
+		
+		xx[i] = hlx[1,k]
+		
+		#println(" xs = $(xx[i])")
+		
+		vsum = zeros(tl)
+		is = px*(i-1) + 1
+		ie = is + px -1
+		
+		#println(" is = $(is), ie = $(ie)")
+		for m in is:ie
+			#println(" m = $(m)")
+			#println(" max ts[$(m)] = $(maximum(ts[m]))")
+			vsum = vsum .+ ts[m]
+		end
+		zxpes[i,:] = vsum
+		#println(" vpes = $(vpes[i])")
+	end
+
+	for i in 1:px
+		#println("i =$(i)")
+		
+		yy[i] = hlx[2,i]
+		
+		#println(" ys = $(yy[i])")
+		
+		vsum = zeros(tl)
+		is = i
+		ie = lx-px+(i-1)
+		
+		#println(" is = $(is), ie = $(ie)")
+		for m in is:px:ie
+			#println(" m = $(m)")
+			#println(" max ts[$(m)] = $(maximum(ts[m]))")
+			vsum = vsum .+ ts[m]
+		end
+		zypes[i,:] = vsum
+		#println(" vpes = $(vpes[i])")
+	end
+
+	xx, yy, zxpes, zypes
+end
+
+# ╔═╡ 9ed19e6c-2f9b-4d16-940f-6269427ac8ee
+"""
+Compute the mean, max and total over the time series for each SiPM
+"""
+function statsts(ts)
+	emax  = zeros(length(ts))
+	emean = zeros(length(ts))
+	etot  = zeros(length(ts))
+	for (i, sipm) in enumerate(ts)
+		emax[i] = maximum(sipm)
+		emean[i] = mean(sipm)
+		etot[i] =sum(sipm)
+	end
+	emax, emean, etot
+end
+
+# ╔═╡ 8b4ddbbf-a22b-4249-8980-630bc2b9bf2b
+"""
+For each SiPM add the time series for all the points in the event
+"""
+function add_time_series(txsipm)
+	npoints = length(txsipm)
+	nsi = length(txsipm[1])
+	nst = length(txsipm[1][1])
+	
+	# Initialize the result vector with zeros for each SiPM's time series
+	sadd = [zeros(nst) for _ in 1:nsi]
+
+	# Loop over all events and accumulate the time series for each SiPM
+	for point in txsipm
+		for (sipm_idx, times) in enumerate(point) 
+        	sadd[sipm_idx] .+= times
+		end
+    end
+	sadd
+end
+
+# ╔═╡ 6ba99a14-a13e-44ea-a873-4597c9b0fd13
+"""
+Transports drift electrons in (x,y) to the nearer hole in the ELCC.
+"""
+function transport_xy_to_sipm(xx, yy, zz, holes, tbins)
+	
+	# Build k-d Tree for Nearest Neighbor Search
+	kdtree = KDTree(holes)
+	k = 2
+
+	@assert length(xx) == length(yy)
+	# find nearest 
+	# Electron ends up in the hole nearest to it. 
+	#sipm  = zeros(1, size(holes)[2])
+	sipm  = zeros(size(holes)[2])
+	tsipm = Vector{Vector{Float64}}(undef, size(holes)[2])
+
+	#for i in 1:size(holes)[2]
+	#	sipm[1,i] = holes[1, i] # xsipm = xhole
+	#	sipm[2,i] = holes[2, i] # ysipm = yhole
+	#end
+		
+	for i in 1:length(xx)
+		pc = zeros(2)
+		pc[1] = xx[i]
+		pc[2] = yy[i]
+	
+		#println("xc =$(pc[1]),yc =$(pc[2])")
+
+		idxs, dists = knn(kdtree, pc, k, true)
+		
+		#sipm[1,idxs[1]] = sipm[1,idxs[1]] + 1
+		sipm[idxs[1]] = sipm[idxs[1]] + 1
+	end
+
+	for i in 1:length(sipm)
+		#tsipm[i] = sipm[3,i] .* tbins
+		tsipm[i] = sipm[i] .* tbins
+	end
+	
+	sipm, tsipm
+	
+end
+
+# ╔═╡ b38a1a09-00ea-4ad4-ac9d-c74a5a1f7700
+function transport_to_el(hitdf, boxtpc, w=21.9, p=13)
+
+	# express dl in cm
+	dl = ustrip.(uconvert.(u"cm", tpc.L .- hitdf.z * mm))
+	
+	
+	# number of drift electrons per energy cluster
+	nel = round.(Int, hitdf.energy*1e+6/w) .+ 1  # energy in MeV, w in eV 
+
+	# pressure p in bar, DL and DT in mm
+	# DL = 1mm sqrt(b) / sqrt(cm)
+	DL = sqrt(p) .* sqrt.(dl)
+	DT = 0.3*sqrt(p) .* sqrt.(dl)
+
+	# DL and DT are the coefficients of a Gaussian distribution
+	sigmax = DT /sqrt(2) # in sqrt(mm)
+
+	xn = Vector{Vector{Float64}}(undef, length(hitdf.x))
+	yn = Vector{Vector{Float64}}(undef, length(hitdf.y))
+	zn = Vector{Vector{Float64}}(undef, length(hitdf.z))
+	for (i,x) in enumerate(hitdf.x)
+		dx = Normal(0, sigmax[i])
+		dz = Normal(0, DL[i])
+		xx = x .+ rand(dx, nel[i]) # in mm
+		
+		#println("x = $(x), nel = $(nel[i]), <xx> = $(mean(xx)) ")
+
+		yy = hitdf.y[i] .+ rand(dx, nel[i]) # in mm
+		#zz = hitdf.z[i] .+ rand(dz, nel[i]) # in mm
+		zz =  tpc.L/mm .+ rand(dz, nel[i]) # Take EL as z = L
+		xn[i] = xx
+		yn[i] = yy
+		zn[i] = zz
+	end
+
+	xn, yn, zn
+end
 
 # ╔═╡ 166dd216-79be-4974-bab9-b2a64bd2d817
 function get_xyz_point(xevt, yevt, zevt, i)
@@ -207,45 +487,6 @@ zmin = $( @sprintf("%.2f", zmin) ) mm, zmax = $( @sprintf("%.2f", zmax) ) mm
 """
 end
 
-# ╔═╡ b38a1a09-00ea-4ad4-ac9d-c74a5a1f7700
-function transport_to_el(hitdf, boxtpc, w=21.9, p=13)
-
-	# express dl in cm
-	dl = ustrip.(uconvert.(u"cm", tpc.L .- hitdf.z * mm))
-	
-	
-	# number of drift electrons per energy cluster
-	nel = round.(Int, hitdf.energy*1e+6/w) .+ 1  # energy in MeV, w in eV 
-
-	# pressure p in bar, DL and DT in mm
-	# DL = 1mm sqrt(b) / sqrt(cm)
-	DL = sqrt(p) .* sqrt.(dl)
-	DT = 0.3*sqrt(p) .* sqrt.(dl)
-
-	# DL and DT are the coefficients of a Gaussian distribution
-	sigmax = DT /sqrt(2) # in sqrt(mm)
-
-	xn = Vector{Vector{Float64}}(undef, length(hitdf.x))
-	yn = Vector{Vector{Float64}}(undef, length(hitdf.y))
-	zn = Vector{Vector{Float64}}(undef, length(hitdf.z))
-	for (i,x) in enumerate(hitdf.x)
-		dx = Normal(0, sigmax[i])
-		dz = Normal(0, DL[i])
-		xx = x .+ rand(dx, nel[i]) # in mm
-		
-		#println("x = $(x), nel = $(nel[i]), <xx> = $(mean(xx)) ")
-
-		yy = hitdf.y[i] .+ rand(dx, nel[i]) # in mm
-		#zz = hitdf.z[i] .+ rand(dz, nel[i]) # in mm
-		zz =  tpc.L/mm .+ rand(dz, nel[i]) # Take EL as z = L
-		xn[i] = xx
-		yn[i] = yy
-		zn[i] = zz
-	end
-
-	xn, yn, zn
-end
-
 # ╔═╡ 69b72ac6-c947-44bf-a10f-6aa7726a7a10
 function mean_diff(xn)
 	std0 = [std(xc) for xc in xn] 
@@ -256,7 +497,7 @@ end
 
 # ╔═╡ 08935cb7-3f21-4e8e-92a1-a8d5e60254f6
 begin
-	event_number         = 4488
+	event_number         = 4489
 	edf                  =select_event(hitdf, event_number) 
 	nel_ev               = edf.energy * 1E+6/Wi
 	xn_ev, yn_ev, zn_ev  = transport_to_el(edf, boxtpc)
@@ -291,9 +532,21 @@ end
 # ╔═╡ c49b70bc-1e09-4571-b9a4-31cd5e303db9
 begin
 	xx, yy, zz  = get_xyz_point(xn_ev, yn_ev, zn_ev, pt1) 
-	zhst = Hist1D(zz,binedges = 1:200)
+	zhst = Hist1D(zz,binedges = 1:201)
 	plot(zhst)
 end
+
+# ╔═╡ 6e1e25bf-5c11-470c-a739-1214243c8438
+begin
+	tbins = bincounts(zhst)./nentries(zhst)
+	plot(tbins, xlabel="time bin", ylabel="weight")
+end
+
+# ╔═╡ a84d9f3f-ba81-4817-8f66-97c8c65adb5e
+md"""
+#### tbins
+- tbins is a vector of weights that is used to distribute the events recorded by a SiPM in a time series. It is obtained by taking the times of arrival to the ELCC (normalizing to the first electron arriving) and binning in $(length(tbins)) bins (1mm = 1 μs)
+"""
 
 # ╔═╡ 99c6d9e7-30f5-4dd3-a95d-14afa511bc53
 begin
@@ -309,24 +562,14 @@ begin
 	
 	xx2, yy2, zz2  = get_xyz_point(xn_ev, yn_ev, zn_ev, pt2) 
 
-	zhst2 = Hist1D(zz2,binedges = 1:200)
+	zhst2 = Hist1D(zz2,binedges = 1:201)
 	plot(zhst2)
 end
 
-# ╔═╡ 0b6cccb6-2bb9-4737-a36b-d925c22660f0
-function plot_sipms(sipms; var="energy")
-	ns1 =size(sipms)[2]
-	xsipm = sipms[1,1:ns1]
-	ysipm = sipms[2,1:ns1]
-	energy = sipms[4,1:ns1]
-	zs = sipms[3,1:ns1]
-	if var == "energy"
-		scatter(xsipm, ysipm, marker_z=energy, 
-			    color=:viridis, xlabel="x", ylabel="y", label="nel")
-	else
-		scatter(xsipm, ysipm, marker_z=zs, 
-			    color=:viridis, xlabel="x", ylabel="y", label="nel")
-	end
+# ╔═╡ ce84c2a4-53d7-4bc7-871e-51aea25093b8
+begin
+	tbins2 = bincounts(zhst2)./nentries(zhst2)
+	plot(tbins2, xlabel="time bin", ylabel="weight")
 end
 
 # ╔═╡ bbd23f58-592d-4c96-b2e6-9449396da78f
@@ -479,10 +722,6 @@ function generate_hole_positions(xmin::AbstractFloat,
     nx = floor(Int, (xmax - xmin + 2 * p) / p) #+ 1
     ny = floor(Int, (ymax - ymin + 2 * p) / p) #+ 1
     
-    # Generate X and Y coordinates
-    #hx = [xmin + p/2 + (i-1)*p for i in 1:nx]
-    #hy = [ymin + p/2 + (j-1)*p for j in 1:ny]
-
 	#println("nx = $(nx), ny = $(ny)")
 	nn = maximum((nx,ny))
 	hxy = zeros(2, nn*nn)
@@ -493,10 +732,6 @@ function generate_hole_positions(xmin::AbstractFloat,
 			hxy[1,n] = xmin - p + (i-1)*p
 			hxy[2,n] = ymin - p + (j-1)*p
 			n+=1
-			#println("n = $(n), i=$(i), j = $(j), hxy[1,$(n)] =$(hxy[1,n]), hxy[2,$(n)] =$(hxy[2,n])")
-			#if n== nn
-			#	break
-			#end
 		end
 	end
 
@@ -539,83 +774,225 @@ begin
 end
 
 
-# ╔═╡ 6ba99a14-a13e-44ea-a873-4597c9b0fd13
+# ╔═╡ 88d90e38-e01c-4938-9e6c-cc9609d8fb50
+begin
+	sipm1, tsipm1 = transport_xy_to_sipm(xx, yy, zz, holes, tbins)
+	tsipm1_sum =[sum(x) for x in tsipm1]
+	isipmx = argmax(tsipm1_sum)
+	plot(tsipm1_sum, xlabel="sipm (hole) number", ylabel="# electrons reaching ELCC hole")
+end
+
+# ╔═╡ 37ede59f-64fb-4297-9634-1810919e6608
+plot(tsipm1[isipmx], xlabel="time (μs)", ylabel="# electrons reaching ELCC hole")
+
+# ╔═╡ 5cabdb81-5aa3-404a-9c7a-28d259a06f67
+scatter(holes[1,:], holes[2,:], marker_z=sipm1, 
+			color=:viridis, xlabel="x", ylabel="y", label=false)
+
+# ╔═╡ 9c6856e5-c063-497c-b15b-d78d34421fbb
+begin
+	sipm2, tsipm2 = transport_xy_to_sipm(xx2, yy2, zz2, holes, tbins2)
+	tsipm2_sum =[sum(x) for x in tsipm2]
+	isipmx2 = argmax(tsipm2_sum)
+	plot(tsipm2_sum, xlabel="sipm (hole) number", ylabel="# electrons reaching ELCC hole")
+end
+
+# ╔═╡ 23704a7a-cfef-482f-b240-4a9ad54026f7
+plot(tsipm2[isipmx2], xlabel="time (μs)", ylabel="# electrons reaching ELCC hole")
+
+# ╔═╡ 0c040aa4-78b5-49e3-a12d-2a2974133168
+begin
+	tsipm = tsipm1 .+ tsipm2
+	tsipm_sum =[sum(x) for x in tsipm]
+	isipmxx = argmax(tsipm_sum)
+	p1 = plot(tsipm_sum, xlabel="sipm (hole) number", ylabel="# electrons reaching ELCC hole")
+	p2 = plot(tsipm[isipmxx], xlabel="time (μs)", ylabel="# electrons reaching ELCC hole")
+	plot(p1, p2, zone=(1,2))
+end
+
+# ╔═╡ c318420a-c068-4bb4-9c59-fb31256c22e6
+scatter(holes[1,:], holes[2,:], marker_z=sipm2, 
+			color=:viridis, xlabel="x", ylabel="y", label=false)
+
+# ╔═╡ 5376610a-ae34-403c-b7b1-c2e1907cc8a5
 """
-Transports drift electrons in (x,y) to the SiPM behind the nearer hole.
+- Generates ionisation electrons (IE) in each point of the track.
+- Transport the IE to the ELCC (diffusion DL and DT)
+- For each IE find the ELCC hole (thus SiPM) where IE goes 
+- Count the IE in each SiPM and arrange them in a time vector (given by DL diffusion) of ntb bins (intervals of tb mus, use the approx relation 1μs = 1mm)
 """
-function transport_xy_to_sipm(xx, yy, zz, holes)
-	#xbmin = minimum(xx)
-	#xbmax = maximum(xx)
-	#ybmin = minimum(yy)
-	#ybmax = maximum(yy)
+function elcc(hitdf, event_number, Wi, ph, dh; ntb=200, tb=1)
+	edf                  =select_event(hitdf, event_number) 
+	nel_ev               = edf.energy * 1E+6/Wi
+	xn_ev, yn_ev, zn_ev  = transport_to_el(edf, boxtpc)
+	xmean_ev, xstd_ev    = mean_diff(xn_ev)
+	ymean_ev, ystd_ev    = mean_diff(yn_ev)
+	zmean_ev, zstd_ev    = mean_diff(zn_ev)
+
+	xbmin = minimum(xmean_ev)
+	xbmax = maximum(xmean_ev)
+	ybmin = minimum(ymean_ev)
+	ybmax = maximum(ymean_ev)
+		
 	# Generate Hole Positions
-	#holes = generate_hole_positions(xbmin, xbmax, ybmin, ybmax, ph, dh)
-	#println(holes)
+	holes = generate_hole_positions(xbmin, xbmax, ybmin, ybmax, ph, dh)
+
+	println("Wi = $(Wi) ev")
+	println(""" ### ELCC Detection 
 	
-	# Build k-d Tree for Nearest Neighbor Search
-	kdtree = KDTree(holes)
-	k = 2
+	Dimensions of ELCC detection area for event = $(event_number)
 
-	@assert length(xx) == length(yy)
-	# find nearest 
-	# Electron ends up in the hole nearest to it. 
-	sipm = zeros(4, size(holes)[2])
+	xmin = $( @sprintf("%.2f", xbmin) ) mm, xmax = $( @sprintf("%.2f", xbmax) ) mm
 
-	for i in 1:size(holes)[2]
-		sipm[1,i] = holes[1, i] # xsipm = xhole
-		sipm[2,i] = holes[2, i] # ysipm = yhole
-	end
-		
-	for i in 1:length(xx)
-		pc = zeros(2)
-		pc[1] = xx[i]
-		pc[2] = yy[i]
+	ymin = $( @sprintf("%.2f", ybmin) ) mm, ymax = $( @sprintf("%.2f", ybmax) ) mm
+
+	size of ELCC matrix (holes = SiPMs) = $(size(holes))
+	""")
 	
-		#println("xc =$(pc[1]),yc =$(pc[2])")
+	nt = size(edf)[1]
+	txsipm = Vector{Vector{Vector{Float64}}}(undef, nt)
 
-		idxs, dists = knn(kdtree, pc, k, true)
-		
-		sipm[3,idxs[1]] = zz[i]
-		sipm[4,idxs[1]] = sipm[4,idxs[1]] + 1
-		
-		#in1 = idxs[1]
-		#in2 = idxs[2]
-		#xn1 = holes[1, in1]
-		#yn1 = holes[2, in1]
-		#xn2 = holes[1, in2]
-		#yn2 = holes[2, in2]
-		#dn1 = sqrt((pc[1] - xn1)^2 + (pc[2] - yn1)^2)
-		#dn2 = sqrt((pc[1] - xn2)^2 + (pc[2] - yn2)^2)
-		
-		#println("indexes: idxs =$(idxs)")
-		#println("distances: dists =$(dists)")
-		#println("dn1 = $(dn1), dn2 = $(dn2)")
-		#println("xn1 = $(xn1), yn1 = $(yn1), xn2 = $(xn2), yn2 = $(yn2)")
+	for ip in 1:size(edf)[1]
+		xx, yy, zz  = get_xyz_point(xn_ev, yn_ev, zn_ev, pt1) 
+		zhst = Hist1D(zz,binedges = 1:tb:ntb+1)
+		tbins = bincounts(zhst)./nentries(zhst)
+		sipm, tsipm = transport_xy_to_sipm(xx, yy, zz, holes, tbins)
+		#println("tispm = $(typeof(tsipm))")
+		txsipm[ip] = tsipm
 	end
-	return sipm
+	xbmin, xbmax, ybmin, ybmax, holes, txsipm
+end
+
+# ╔═╡ af0341d5-70b5-4fce-9ec5-c65cb4ec066d
+xbm, xbmx, ybm, ybmx, hlx, txsipm = elcc(hitdf, event_number, Wi, ph, dh; ntb=200, tb=1)
+
+# ╔═╡ 8aff1c8a-1b5f-4224-ac26-ffab1edb9a22
+begin
+	npoints = length(txsipm)
+	nsi = length(txsipm[1])
+	nst = length(txsipm[1][1])
+md"""
+- Vector txsipm has $(npoints) vector, corresponding to the numper of points in the event.
+- Each vector has $(nsi) vectors, corresponding to the matrix os SiPMs.
+- Each vector of the matrix has $(nst) numbers, corresponding to the number of electrons recorded in the SiPM in a time series of $(nst) elements. 
+"""
+end
+
+# ╔═╡ b30aa2b9-9557-4ff1-9790-88757aeab321
+begin
+	ts = add_time_series(txsipm)
+	
+	
+md"""
+-  Vector ts is obtained adding the time series for all points in each SiPM.
+- Each element of ts has $(length(ts)) SiPMs.
+- Each SiPM has a time series of length $(length(ts[1]))
+"""
+end
+
+# ╔═╡ 49da6468-0b78-4c16-ac87-2dd06f15c481
+begin
+	emax, emean, etot = statsts(ts)
+	md"""
+	- emax computes the maximum number of electron in the time series, and thus one element for SiPM with length $(length(emax))
+	- emean computes the mean number of electron in the time series, and thus one element for SiPM with length $(length(emax))
+	- etot adds all electron in the time series, and thus one element for SiPM with length $(length(emax))
+	"""
+end
+
+# ╔═╡ 0fd805b8-d659-44be-8da5-e4378d974f36
+begin
+	px4 = plot(Hist1D(edf.energy * 1E+6/Wi, binedges = 0:2:200), title="# electrons per point")
+	px1 = plot(Hist1D(emean, binedges = 0:2:200), title=" <# electrons> per sipm")
+	px2 = plot(Hist1D(emax, binedges = 0:10:1000), title=" max(electrons) per sipm")
+	px3 = plot(Hist1D(etot, binedges = 0:400:40000), title=" sum(electrons) per sipm")
+	
+	plot(px4, px1,px2,px3, zone=(2,2))
 	
 end
 
-# ╔═╡ 88d90e38-e01c-4938-9e6c-cc9609d8fb50
-sipms = transport_xy_to_sipm(xx, yy, zz, holes)
+# ╔═╡ dd1b911f-3f6c-43a1-87f2-8e046835b480
+begin
+	maxpe = emax * gt
+	avpe = emean * gt
+	mxpecl = maxpe/ncl
+	avpecl = avpe/ncl
+	totpe  = etot * gt
+	pestot = sum(totpe)
+	sigma_pes = 100/sqrt(pestot)
+	pxx1 = plot(Hist1D(maxpe, binedges = 0:50:5000), title=" max pes per sipm")
+	pxx2 = plot(Hist1D(avpe, binedges = 0:50:5000), title=" average pes per sipm")
+	pxx3 = plot(Hist1D(mxpecl, binedges = 0:0.05:1), title=" max pes sipm/cell")
+	pxx4 = plot(Hist1D(avpecl, binedges = 0:0.05:1), title=" average pes sipm/cell")
+	
+	plot(pxx1,pxx2,pxx3, pxx4, zone=(2,2), size = (900,600))
+	
+end
 
-# ╔═╡ 5cabdb81-5aa3-404a-9c7a-28d259a06f67
-plot_sipms(sipms, var="energy")
+# ╔═╡ a815824c-4b55-442e-9634-28731944f23c
+md"""
+- total number of pes per event = $(@sprintf("%.2f", pestot) )
+- relative resolution = $(@sprintf("%.2f", sigma_pes) ) %
+"""
 
-# ╔═╡ d1934171-8d78-451c-a902-ad07ec18b0fd
-plot_sipms(sipms, var="zz")
+# ╔═╡ 7c0587b4-00d1-4f47-89f1-6a13b022ec43
+begin
+	hmxpe = Hist1D(maxpe, binedges = 0:250:50000)
+	mxpe = bincounts(hmxpe)
+	lmxpe = length(mxpe)
+	xss = sum(mxpe[4:lmxpe])/sum(mxpe)
 
-# ╔═╡ 5656f3c6-b64d-4afe-8338-eec8052718cc
-sipms2 = transport_xy_to_sipm(xx2, yy2, zz2, holes)
+	md"""
+	- Fraction of SiPMs with one or more saturated sample (histo counting) = $(@sprintf("%.2f", xss))
+	
+	"""
+end
 
-# ╔═╡ c318420a-c068-4bb4-9c59-fb31256c22e6
-plot_sipms(sipms2, var="energy")
+# ╔═╡ 976f69f8-c159-4de9-8e48-b1dfad22669b
+begin 
+	xfs = fraction_saturated_sipm(ts,mxp,gt)
+md"""
+- Fraction of SiPMs with one or more saturated sample = $(@sprintf("%.2f", xfs))
 
-# ╔═╡ 83f47099-d8fe-45ea-9e85-39ac089aed19
-sipmx = sipms + sipms2
+"""
+end
 
-# ╔═╡ 0c040aa4-78b5-49e3-a12d-2a2974133168
-plot_sipms(sipmx, var="energy")
+# ╔═╡ 520341e4-d79f-41f9-9ffd-2ac85a68fcde
+scatter(hlx[1,:], hlx[2,:], marker_z=emean, 
+			color=:viridis, xlabel="x", ylabel="y", label=false)
+
+
+# ╔═╡ 4b7b91be-fdf3-4ab8-9d8b-35c6749c2475
+scatter(hlx[1,:], hlx[2,:], marker_z=emax, 
+			color=:viridis, xlabel="x", ylabel="y", label=false)
+
+# ╔═╡ 6d8da4dd-572f-4c8e-8959-0f67fdb3f692
+scatter(hlx[1,:], hlx[2,:], marker_z=etot, 
+			color=:viridis, xlabel="x", ylabel="y", label=false)
+
+# ╔═╡ 34dee5c2-bd5c-4be7-9ab4-b09c5867d125
+begin
+	xbm, xbmx, ybm, ybmx, hlx
+	rx, ry = xbm:1.0:xbmx, ybm:1.0:ybmx
+	wgts = totpe
+    hxyevt = Hist2D((hlx[1,:], hlx[2,:]); weights = wgts, binedges = (rx, ry))
+	plot(hxyevt)
+end
+
+# ╔═╡ a1a4f09b-a8b5-4a2f-b281-68d36b5939ef
+xbx, yby, zxpes, zypes = mat_hxz(hlx, ts)
+
+# ╔═╡ 40e5aefd-505b-4225-8e0e-687dad35387b
+zxpes
+
+# ╔═╡ f658dc54-4c7d-4e49-af5f-5df749c50852
+zypes
+
+# ╔═╡ fe61e9ed-a279-4e08-b224-ddd4eea4ade1
+heatmap(zxpes)
+
+# ╔═╡ 05a314de-2eec-419a-97d6-8bf55dfa9938
+heatmap(zypes)
 
 # ╔═╡ 1e23c6cb-853b-43a9-ae97-e4b144d04fcb
 """
@@ -775,33 +1152,69 @@ I have three vectors of the same length x, y, z. I need to group z in n bins. I 
 # ╠═b59aa31a-c222-457c-8b46-73d745173885
 # ╠═bcb2c7e6-cb17-4048-86b7-3a854fc24629
 # ╠═c49b70bc-1e09-4571-b9a4-31cd5e303db9
+# ╠═a84d9f3f-ba81-4817-8f66-97c8c65adb5e
+# ╠═6e1e25bf-5c11-470c-a739-1214243c8438
 # ╠═6fa739ae-6e98-4378-93c5-41c2e68b971d
 # ╠═88d90e38-e01c-4938-9e6c-cc9609d8fb50
+# ╠═37ede59f-64fb-4297-9634-1810919e6608
 # ╠═5cabdb81-5aa3-404a-9c7a-28d259a06f67
-# ╠═d1934171-8d78-451c-a902-ad07ec18b0fd
 # ╠═99c6d9e7-30f5-4dd3-a95d-14afa511bc53
 # ╠═8a8d1789-c1cb-4c47-a578-da926bf34edc
+# ╠═ce84c2a4-53d7-4bc7-871e-51aea25093b8
 # ╠═22b78ecd-e1bc-4dad-983b-f514dfc77ac6
-# ╠═5656f3c6-b64d-4afe-8338-eec8052718cc
+# ╠═9c6856e5-c063-497c-b15b-d78d34421fbb
+# ╠═23704a7a-cfef-482f-b240-4a9ad54026f7
 # ╠═c318420a-c068-4bb4-9c59-fb31256c22e6
 # ╠═5f1de077-147b-4fe1-84b3-0327d795214e
-# ╠═83f47099-d8fe-45ea-9e85-39ac089aed19
 # ╠═0c040aa4-78b5-49e3-a12d-2a2974133168
+# ╠═86149e81-ed71-4c57-aeb8-fe525be4ad64
+# ╠═af0341d5-70b5-4fce-9ec5-c65cb4ec066d
+# ╠═8aff1c8a-1b5f-4224-ac26-ffab1edb9a22
+# ╠═b30aa2b9-9557-4ff1-9790-88757aeab321
+# ╠═49da6468-0b78-4c16-ac87-2dd06f15c481
+# ╠═8d1e1d84-a7d0-44e0-8ddf-2dc3b2f43add
+# ╠═520341e4-d79f-41f9-9ffd-2ac85a68fcde
+# ╠═921e6046-ff59-43d2-a834-a74320331ef9
+# ╠═4b7b91be-fdf3-4ab8-9d8b-35c6749c2475
+# ╠═2ceb0f10-33c1-45fc-a5a8-e456f481f3ac
+# ╠═6d8da4dd-572f-4c8e-8959-0f67fdb3f692
+# ╠═0fd805b8-d659-44be-8da5-e4378d974f36
+# ╠═8fd4e626-f8f4-4541-b520-19fe8beeef1c
+# ╠═dd1b911f-3f6c-43a1-87f2-8e046835b480
+# ╠═34dee5c2-bd5c-4be7-9ab4-b09c5867d125
+# ╠═a1a4f09b-a8b5-4a2f-b281-68d36b5939ef
+# ╠═40e5aefd-505b-4225-8e0e-687dad35387b
+# ╠═f658dc54-4c7d-4e49-af5f-5df749c50852
+# ╠═fe61e9ed-a279-4e08-b224-ddd4eea4ade1
+# ╠═05a314de-2eec-419a-97d6-8bf55dfa9938
+# ╠═a815824c-4b55-442e-9634-28731944f23c
+# ╠═ae4ae06f-a756-4cf6-94d0-d08dac29ed48
+# ╠═7c0587b4-00d1-4f47-89f1-6a13b022ec43
+# ╠═976f69f8-c159-4de9-8e48-b1dfad22669b
+# ╠═dde3b9ff-3f28-49c8-b3cb-efe9f9827e85
+# ╠═5376610a-ae34-403c-b7b1-c2e1907cc8a5
+# ╠═df6e502e-7892-4158-bfb7-cc38214618a1
+# ╠═f7b2fbef-f189-4c4e-b7ce-ee46688d530d
+# ╠═4c58b596-9da3-4e31-ae3e-5acf18e206a4
+# ╠═a442b7d0-9035-48a9-bbce-98c66c09e05f
 # ╟─c446556a-239d-4e95-a3e7-3f7f3679e038
+# ╠═a01e9701-dce9-496e-85f9-cc511fb274ed
+# ╠═b9c13dfc-614d-4f95-9a71-8c3152a0c5fd
+# ╠═9ed19e6c-2f9b-4d16-940f-6269427ac8ee
+# ╠═8b4ddbbf-a22b-4249-8980-630bc2b9bf2b
+# ╠═6ba99a14-a13e-44ea-a873-4597c9b0fd13
+# ╠═b38a1a09-00ea-4ad4-ac9d-c74a5a1f7700
 # ╠═166dd216-79be-4974-bab9-b2a64bd2d817
 # ╠═79b86295-13e1-4277-8dc0-55106ba2e887
 # ╠═4e0634f1-3b46-47fe-b742-a815ea1aef4e
 # ╠═790948af-bed5-4f68-a52a-de7d6af932fb
 # ╠═2a0ffd4a-0a8a-45a3-8f98-3893f8628ce4
 # ╠═5ebd4bf9-b53f-4610-8260-0c42b302a6ea
-# ╠═b38a1a09-00ea-4ad4-ac9d-c74a5a1f7700
 # ╠═69b72ac6-c947-44bf-a10f-6aa7726a7a10
-# ╠═0b6cccb6-2bb9-4737-a36b-d925c22660f0
 # ╠═bbd23f58-592d-4c96-b2e6-9449396da78f
 # ╠═2b0d31f0-69c3-4a2c-9d6c-7e96d6393571
 # ╠═a62a307b-28e9-4b15-ac5e-ce2d4745a5cc
 # ╠═68f875be-3126-4041-90a8-14403b8def72
-# ╠═6ba99a14-a13e-44ea-a873-4597c9b0fd13
 # ╠═1e23c6cb-853b-43a9-ae97-e4b144d04fcb
 # ╠═ed4a219b-e405-450c-a006-a2dbcffb5f7d
 # ╠═e18be5a0-ff16-4552-996c-cfe7ef52a36a

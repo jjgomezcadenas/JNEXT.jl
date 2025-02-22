@@ -102,6 +102,64 @@ xmean\_ev takes the mean of each element of xn\_ev. Thus, it has the average of 
 """
 
 
+# ╔═╡ d44485bc-8aa3-470d-9ac5-9530692d7d6c
+"""
+Plots an event before and after diffusion
+"""
+function plot_event_true_diffusion(xt::AbstractVector{<:AbstractFloat},
+	                yt::AbstractVector{<:AbstractFloat},
+	                zt::AbstractVector{<:AbstractFloat},
+					xd::AbstractVector{<:AbstractFloat},
+	                yd::AbstractVector{<:AbstractFloat},
+	                zd::AbstractVector{<:AbstractFloat};
+                    markersize::Int64=1, zoom::Bool=false, 
+                    size::Tuple{Int64, Int64}=(900,400))
+
+	
+	xmint = minimum(xt)
+	xmaxt = maximum(xt)
+	ymint = minimum(yt)
+	ymaxt = maximum(yt)
+	zmint = minimum(zt)
+	zmaxt = maximum(zt)
+
+	xmin = minimum(xd)
+	xmax = maximum(xd)
+	ymin = minimum(yd)
+	ymax = maximum(yd)
+	zmin = minimum(zd)
+	zmax = maximum(zd)
+	
+
+	
+	s3dt = scatter3d(xt, yt, zt, 
+		            markersize=markersize, 
+		            label="Ionization, XYZ",
+	                xlims = (xmint, xmaxt),
+                    ylims = (ymint, ymaxt),
+                    zlims = (zmint, zmaxt))
+	sxyt = scatter(xt, yt, 
+		            markersize=markersize, 
+		            label="Ionization, XY",
+		            xlims = (xmint, xmaxt),
+                    ylims = (ymint, ymaxt))
+	s3d = scatter3d(xd, yd, zd, 
+		            markersize=markersize, 
+		            label="Diffusion, XYZ",
+	                xlims = (xmin, xmax),
+                    ylims = (ymin, ymax),
+                    zlims = (zmin, zmax))
+	sxy = scatter(xd, yd, 
+		            markersize=markersize, 
+		            label="Diffusion, XY",
+		            xlims = (xmin, xmax),
+                    ylims = (ymin, ymax))
+	
+	plot(s3dt, sxyt, s3d, sxy,  
+    layout=(2,2),  # 1 row, 2 columns
+    size=size)
+end
+
 # ╔═╡ 5f1de077-147b-4fe1-84b3-0327d795214e
 md"""
 ### Add the two points
@@ -520,6 +578,11 @@ xn_ev
 # ╔═╡ a65da87a-0689-48c0-816d-c415c71d6bc9
 xmean_ev
 
+# ╔═╡ a17d9f8b-7df2-4816-b877-63a866008713
+plot_event_true_diffusion(edf.x, edf.y, edf.z, 
+	                      xmean_ev, ymean_ev, zmean_ev;
+		                  markersize=1, zoom=true, size=(1200,600))
+
 # ╔═╡ bcb2c7e6-cb17-4048-86b7-3a854fc24629
 begin
 	pt1 = 1
@@ -571,6 +634,12 @@ begin
 	tbins2 = bincounts(zhst2)./nentries(zhst2)
 	plot(tbins2, xlabel="time bin", ylabel="weight")
 end
+
+# ╔═╡ 64482845-8ac7-4d9c-969e-74911d9d3da6
+md"""
+
+## PLOTS
+"""
 
 # ╔═╡ bbd23f58-592d-4c96-b2e6-9449396da78f
 function display2d(h1, h2, 
@@ -1149,6 +1218,7 @@ I have three vectors of the same length x, y, z. I need to group z in n bins. I 
 # ╠═a65da87a-0689-48c0-816d-c415c71d6bc9
 # ╠═6831ccc5-3607-4ace-9f37-da203502b1b4
 # ╠═bcb22069-18eb-44aa-ba00-26244be4e3fb
+# ╠═a17d9f8b-7df2-4816-b877-63a866008713
 # ╠═b59aa31a-c222-457c-8b46-73d745173885
 # ╠═bcb2c7e6-cb17-4048-86b7-3a854fc24629
 # ╠═c49b70bc-1e09-4571-b9a4-31cd5e303db9
@@ -1211,6 +1281,8 @@ I have three vectors of the same length x, y, z. I need to group z in n bins. I 
 # ╠═2a0ffd4a-0a8a-45a3-8f98-3893f8628ce4
 # ╠═5ebd4bf9-b53f-4610-8260-0c42b302a6ea
 # ╠═69b72ac6-c947-44bf-a10f-6aa7726a7a10
+# ╠═64482845-8ac7-4d9c-969e-74911d9d3da6
+# ╠═d44485bc-8aa3-470d-9ac5-9530692d7d6c
 # ╠═bbd23f58-592d-4c96-b2e6-9449396da78f
 # ╠═2b0d31f0-69c3-4a2c-9d6c-7e96d6393571
 # ╠═a62a307b-28e9-4b15-ac5e-ce2d4745a5cc

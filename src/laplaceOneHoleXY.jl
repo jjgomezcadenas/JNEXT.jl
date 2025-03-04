@@ -13,6 +13,7 @@ end
     GALAParams
 
 Structure to hold the parameters of the GALA problem.
+  - x1: position of the hole
   - d: hole diameter.
   - rmax: half–extent of the horizontal domain (the x–domain runs from –rmax to rmax).
   - l1: z–position of the anode (potential Va).
@@ -23,6 +24,7 @@ Structure to hold the parameters of the GALA problem.
   - V0: potential at the top electrode.
 """
 struct GALAParams
+    x1::Float64
     d::Float64      
     rmax::Float64   
     l1::Float64     
@@ -109,11 +111,11 @@ function solve_laplace_gala_xz(params::GALAParams; Nx=101, Nz=101)
                 A_mat[idx, idx] = 1.0
                 b_vec[idx] = params.V0
             # At z = l1 (anode): impose φ = Va only for x inside the hole.
-            elseif (j == i_zl1) && (x_val >= -params.d/2 && x_val <= params.d/2)
+            elseif (j == i_zl1) && (x_val > -params.d/2 && x_val < params.d/2)
                 A_mat[idx, idx] = 1.0
                 b_vec[idx] = params.Va
             # At z = l2 (gate): impose φ = Vg only for x inside the hole.
-            elseif (j == i_zl2) && (x_val >= -params.d/2 && x_val <= params.d/2)
+            elseif (j == i_zl2) && (x_val > -params.d/2 && x_val < params.d/2)
                 A_mat[idx, idx] = 1.0
                 b_vec[idx] = params.Vg
             else
@@ -126,12 +128,12 @@ function solve_laplace_gala_xz(params::GALAParams; Nx=101, Nz=101)
                 # x–direction:
                 if i == 1
                     # Left boundary (x = x_min): impose Neumann (∂φ/∂x = 0) via a one-sided difference.
-                    A_mat[idx, index(1, j)] = 1.0
-                    A_mat[idx, index(2, j)] = -1.0
+                    A_mat[idx, index(1, j)] = -2.0/dx^2
+                    A_mat[idx, index(2, j)] = 2.0/dx^2
                 elseif i == Nx
                     # Right boundary (x = x_max): impose Neumann.
-                    A_mat[idx, index(Nx, j)]   = 1.0
-                    A_mat[idx, index(Nx-1, j)] = -1.0
+                    A_mat[idx, index(Nx, j)]   = -2.0/dx^2
+                    A_mat[idx, index(Nx-1, j)] = 2.0/dx^2
                 else
                     # Interior x nodes: central difference.
                     A_mat[idx, index(i+1, j)] += 1/dx^2
@@ -485,12 +487,12 @@ function plot_E_field_quiver(phi_mat, rgrid, zgrid; skip_r=2, skip_z=2, scale=0.
 end
 
 
-plot_phi_contour(phi_mat, rgrid, zgrid)
+# plot_phi_contour(phi_mat, rgrid, zgrid)
 
-plot_E_field_quiver(phi_mat, rgrid, zgrid; skip_r=2, skip_z=2, scale=0.1)
+# plot_E_field_quiver(phi_mat, rgrid, zgrid; skip_r=2, skip_z=2, scale=0.1)
 
-trajectories = compute_electron_trajectories(phi_mat, rgrid, zgrid, gparams;
-                                             N_electrons=200, 
-                                             ds=1e-3, max_steps=500000)
+# trajectories = compute_electron_trajectories(phi_mat, rgrid, zgrid, gparams;
+#                                              N_electrons=200, 
+#                                              ds=1e-3, max_steps=500000)
 
-plot_trajectories(trajectories)
+# plot_trajectories(trajectories)

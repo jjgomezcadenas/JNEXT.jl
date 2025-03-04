@@ -10,35 +10,9 @@ using StatsBase
 using StatsPlots
 using Distributions
 
-function testprint()
-    println("Hello")
-end
-# =============================================================================
-# GALAParams: holds the geometry and potential parameters for the GALA problem.
-#
-# In this two–hole configuration:
-#   - d: hole diameter.
-#   - rmax: half–extent of the horizontal domain, so x ∈ [–rmax, rmax].
-#   - l1: z–position of the anode (potential Va).
-#   - l2: z–position of the gate (potential Vg).
-#   - l3: z–position of the top electrode (potential V0).
-#
-# The two holes have centers at x = –d/2 and x = d/2, so their regions are:
-#   Hole 1: x ∈ [–d, 0]
-#   Hole 2: x ∈ [0, d]
-# (Note: p, the pitch, is taken equal to d.)
-# =============================================================================
-struct GALAParams
-    d::Float64       # hole diameter
-    p::Float64       # extra separation (pitch minus d) or defined so that the centers are at ±(p+d)/2
-    rmax::Float64    # defines domain 
-    l1::Float64      # z position of the anode (with potential Va)
-    l2::Float64      # z position of the gate (with potential Vg)
-    l3::Float64      # z position of the top electrode (with potential V0)
-    Va::Float64      # anode potential
-    Vg::Float64      # gate potential
-    V0::Float64      # top electrode potential
-end
+
+
+
 
 # =============================================================================
 # Helper function: find_z_index
@@ -52,13 +26,173 @@ function find_z_index(zval, zgrid)
 end
 
 
-using SparseArrays
-using LinearAlgebra
+struct GalaParams
+    x1::Float64     # x-position of Hole 1 center
+    d1::Float64     # hole diameter [m]
+    p::Float64      # pitch [m]
+    l0::Float64     # z-position of ground (potential 0) [m]
+    l1::Float64     # z-position of anode (potential Va) [m]
+    l2::Float64     # z-position of gate (potential Vg) [m]
+    l3::Float64     # z-position of top electrode (potential V0) [m]
+    Va::Float64     # anode potential [V]
+    Vg::Float64     # gate potential [V]
+    V0::Float64     # top electrode potential [V]
+end
 
-# Helper to find index in the z grid (as before)
-function find_z_index(zval, zgrid)
-    diffs = abs.(zgrid .- zval)
-    return argmin(diffs)
+"""
+Solve laplace in two dimensiones
+"""
+function phi2d(params::GalaParams, Nx::Int, Nz::Int)
+    # Unpack parameters
+    x1_center = params.x1
+    d1 = params.d1
+    p = params.p
+    l0, l1, l2, l3 = params.l0, params.l1, params.l2, params.l3
+    Va, Vg, V0 = params.Va, params.Vg, params.V0
+
+    # Define x-domain: x from (x1 - p/2) to (x1 + p + p/2)
+    x_min = x1_center - p/2
+    x_max = x1_center + p/2
+    x = range(x_min, stop=x_max, length=Nx)
+    z = range(l0, stop=l3, length=Nz)
+    dx = (x_max - x_min) / (Nx - 1)
+    dz = (l3 - l0) / (Nz - 1)
+
+    # Compute grid indices for Dirichlet boundaries.
+    # (argmin returns the index of the minimum value)
+    j_l0 = argmin(abs.(z .- l0))
+    j_l1 = argmin(abs.(z .- l1))
+    j_l2 = argmin(abs.(z .- l2))
+    j_l3 = argmin(abs.(z .- l3))
+
+    N = Nx * Nz
+    # Preallocate space for sparse matrix entries.
+    max_entries = 7 * N   # upper-bound estimate for nonzero entries
+    rows  = Vector{Int}(undef, N)
+    cols  = Vector{Int}(undef, N)
+    vals  = Vector{Float64}(undef, N)
+    counter = 0
+    b = zeros(Float64, N)
+
+    # Helper to add a nonzero entry.
+    function add_entry!(k, kk, coeff)
+        nonlocal counter
+        counter += 1
+        rows[counter] = k
+        cols[counter] = kk
+        vals[counter] = coeff
+    end
+
+    # Return true if x_val is within the hole centered at hole_center.
+    in_hole(x_val, hole_center) = (x_val > (hole_center - d1/2)) && (x_val < (hole_center + d1/2))
+
+    # Check if grid point (j, i) is Dirichlet and return (flag, value).
+    function is_dirichlet(j, i)
+        # Bottom electrode: z = l0 → φ = 0
+        if j == j_l0
+            return true, 0.0
+        end
+        # Top electrode: z = l3 → φ = V0
+        if j == j_l3
+            return true, V0
+        end
+        # Anode: z = l1, if x lies in either hole → φ = Va
+        if j == j_l1 && in_hole(x[i], x1_center) 
+            return true, Va
+        end
+        # Gate: z = l2, if x lies in either hole → φ = Vg
+        if j == j_l2 && in_hole(x[i], x1_center) 
+            return true, Vg
+        end
+        return false, 0.0
+    end
+
+    # Build the finite-difference system.
+    @inbounds for j in 1:Nz
+        for i in 1:Nx
+            k = (j - 1) * Nx + i  # Flatten 2D index to 1D.
+            fixed, val = is_dirichlet(j, i)
+            if fixed
+                add_entry!(k, k, 1.0)
+                b[k] = val
+                continue
+            end
+
+            # x-direction finite differences.
+            if i == 1
+                # Left boundary: Neumann (one-sided derivative).
+                add_entry!(k, k, -2.0/dx^2)
+                k_right = k + 1  # (j, i+1)
+                fixed_r, val_r = is_dirichlet(j, i+1)
+                if fixed_r
+                    b[k] -= (2.0/dx^2) * val_r
+                else
+                    add_entry!(k, k_right, 2.0/dx^2)
+                end
+            elseif i == Nx
+                # Right boundary: Neumann.
+                add_entry!(k, k, -2.0/dx^2)
+                k_left = k - 1  # (j, i-1)
+                fixed_l, val_l = is_dirichlet(j, i-1)
+                if fixed_l
+                    b[k] -= (2.0/dx^2) * val_l
+                else
+                    add_entry!(k, k_left, 2.0/dx^2)
+                end
+            else
+                # Interior in x.
+                add_entry!(k, k, -2.0/dx^2)
+                k_right = k + 1
+                fixed_r, val_r = is_dirichlet(j, i+1)
+                if fixed_r
+                    b[k] -= (1.0/dx^2)*val_r
+                else
+                    add_entry!(k, k_right, 1.0/dx^2)
+                end
+                k_left = k - 1
+                fixed_l, val_l = is_dirichlet(j, i-1)
+                if fixed_l
+                    b[k] -= (1.0/dx^2)*val_l
+                else
+                    add_entry!(k, k_left, 1.0/dx^2)
+                end
+            end
+
+            # z-direction finite differences (skip boundaries which are Dirichlet).
+            if j != 1 && j != Nz
+                add_entry!(k, k, -2.0/dz^2)
+                k_up = k + Nx   # (j+1, i)
+                fixed_up, val_up = is_dirichlet(j+1, i)
+                if fixed_up
+                    b[k] -= (1.0/dz^2)*val_up
+                else
+                    add_entry!(k, k_up, 1.0/dz^2)
+                end
+                k_down = k - Nx  # (j-1, i)
+                fixed_down, val_down = is_dirichlet(j-1, i)
+                if fixed_down
+                    b[k] -= (1.0/dz^2)*val_down
+                else
+                    add_entry!(k, k_down, 1.0/dz^2)
+                end
+            end
+        end
+    end
+
+    # Trim the arrays to the actual number of nonzero entries.
+    rows = rows[1:counter]
+    cols = cols[1:counter]
+    vals = vals[1:counter]
+
+    # Build the sparse matrix.
+    A = sparse(rows, cols, vals, N, N)
+
+    # Solve the system.
+    phi_flat = A \ b
+    # Reshape the solution to a 2D array (Nz rows, Nx columns). Note that we transpose
+    # because our linear index was computed in row-major order.
+    phi = reshape(phi_flat, (Nx, Nz))'
+    return collect(x), collect(z), phi
 end
 
 """

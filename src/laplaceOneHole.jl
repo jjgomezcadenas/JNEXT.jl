@@ -111,10 +111,10 @@ function solve_laplace_gala(params::GALAParams; Nr=51, Nz=101)
                 A_mat[idx, idx] = 1.0
                 b_vec[idx] = params.V0
             # For the anode (z = l1) and gate (z = l2), impose Dirichlet only inside the hole.
-            elseif (j == i_zl1) && (r_val <= params.d/2)
+            elseif (j == i_zl1) && (r_val < params.d/2)
                 A_mat[idx, idx] = 1.0
                 b_vec[idx] = params.Va
-            elseif (j == i_zl2) && (r_val <= params.d/2)
+            elseif (j == i_zl2) && (r_val < params.d/2)
                 A_mat[idx, idx] = 1.0
                 b_vec[idx] = params.Vg
             else

@@ -104,7 +104,7 @@ def phixz1h(params: X1Params, Nx: int, Nz: int):
 
     def in_hole(x_val, hole_center):
         """Return True if x_val is within the hole (centered at hole_center with diameter d1)."""
-        return (x_val > (hole_center - d1/2)) and (x_val < (hole_center + d1/2))
+        return (x_val >= (hole_center - d1/2)) and (x_val <= (hole_center + d1/2))
 
     
     N = Nx * Nz
@@ -241,7 +241,257 @@ def phixz1h(params: X1Params, Nx: int, Nz: int):
     # Solve the linear system.
     phi_flat = spsolve(A, b)
     phi = phi_flat.reshape((Nz, Nx))
-    return x, z, phi
+    return  x, z, phi
+
+
+# -------------------------
+# Assemble the sparse matrix A and right-hand side b for all nodes.
+# We order the nodes with a single index: k = j*Nx + i.
+# For Dirichlet nodes, we set the equation: phi = fixed_value.
+# For interior (unknown) nodes, we apply finite differences.
+# -------------------------
+def phi2d1h(params: GalaParams, Nx: int, Nz: int):
+   
+    def add_entry(k, kk, coeff):
+        rows.append(k)
+        cols.append(kk)
+        data.append(coeff)
+
+    def is_dirichlet(j, i):
+        """
+        Determine if the grid point (j, i) is a Dirichlet point.
+        Returns a tuple (flag, value) where flag is True if the point is fixed.
+        
+        Dirichlet conditions are:
+        - z = 0: φ = 0
+        - z = l3: φ = V0
+        - z = l1 (anode): φ = Va, but only for x-values inside one of the holes.
+        - z = l2 (gate): φ = Vg, but only for x-values inside one of the holes.
+    """
+        # Bottom electrode: z=0
+        if j == j_l0:
+            return True, 0.0
+        # Top electrode: z=l3
+        if j == j_l3:
+            return True, V0
+        # Anode: z = l1, inside either hole => Va
+        if j == j_l1 and in_hole(x[i], x1_center):
+            return True, Va
+        # Gate: z = l2, inside either hole => Vg
+        if j == j_l2 and in_hole(x[i], x1_center):
+            return True, Vg
+        return False, None
+
+    def in_hole(x_val, hole_center):
+        """Return True if x_val is within the hole (centered at hole_center with diameter d1)."""
+        return (x_val >= (hole_center - d1/2)) and (x_val <= (hole_center + d1/2))
+
+    
+    N = Nx * Nz
+    x1_center = params.x1    # center of hole 1 (mm)
+    d1 = params.d1
+    p =  params.p             # pitch between holes (mm)
+    
+    l0 = params.l0
+    l3 = params.l3
+    l1 = params.l1
+    l2 = params.l2
+    Va = params.Va
+    Vg = params.Vg
+    V0 = params.V0
+
+    # x-domain: from x1 - p/2 to x2 + p/2
+    x_min = x1_center - p/2
+    x_max = x1_center + p/2
+    
+    x = np.linspace(x_min, x_max, Nx)
+    z = np.linspace(l0, l3, Nz)
+    dx = x[1]-x[0]
+    dz = z[1]-z[0]
+
+    print(f"""
+    Nx = {Nx}, Nz = {Nz}
+    x1 = {x1_center}, p = {p}, d = {d1}
+    x_min = {x_min}, x_max = {x_max}
+    dx = {dx}, dz = {dz}
+    """)
+
+    # Find grid indices for z = l1 and l2 (assume they fall on grid)
+    j_l1 = np.argmin(np.abs(z - l1))
+    j_l2 = np.argmin(np.abs(z - l2))
+    j_l3 = np.argmin(np.abs(z - l3))
+    j_l0 = np.argmin(np.abs(z - l0))
+    data = []    # List to store nonzero matrix entries
+    rows = []    # Row indices of nonzero entries
+    cols = []    # Column indices of nonzero entries
+    b = np.zeros(N)  # Right-hand side vector
+
+    # Loop over all grid points (j for z-index, i for x-index)
+    for j in range(Nz):
+        for i in range(Nx):
+            k = j * Nx + i # Flatten 2D index (j, i) into 1D index k
+
+            print(f"------------j = {j}, i = {i}, k = {k}-----------")
+
+            # Check if current node has a Dirichlet condition (fixed potential)
+            fixed, val = is_dirichlet(j, i)
+            if fixed:
+                print(f"node is dirichlet, b[{k}]= {val} ")
+                add_entry(k, k, 1.0)
+                b[k] = val
+                continue # Skip further processing for fixed nodes
+
+            # For interior or Neumann boundary nodes, apply the finite difference stencil.
+            # The Laplacian: (d^2φ/dx^2 + d^2φ/dz^2)= 0
+            # We use a 5-point stencil:
+            #   (phi(i+1,j) - 2*phi(i,j) + phi(i-1,j))/dx^2 +
+            #   (phi(i,j+1) - 2*phi(i,j) + phi(i,j-1))/dz^2 = 0
+    
+             # --- x-direction finite differences ---
+
+            print(f"------------x direction-----------, i = {i}")
+            if i == 0:
+                 # Left boundary: Neumann condition (zero derivative)
+                 # Use a one-sided difference where φ(i-1,j) is replaced by φ(i+1,j)
+
+                print(f"--left boundary--, i = {i}")
+                coeff_center_x = -2.0/dx**2
+                coeff_right = 2.0/dx**2
+
+                #print(f"-coeff_center_x ={coeff_center_x}  coeff_right ={coeff_right}")
+                # center
+
+                print(f"-->add entry, r = {k} c= {k}, coeff={coeff_center_x}")
+                
+                add_entry(k, k, coeff_center_x)
+                # right neighbor (i+1)
+                k_right = j * Nx + (i+1)
+
+                print(f"--#now consider neighbor  i+1 = {i+1} with k_right = j * Nx + (i+1) = {k_right}: is dirichlet?")
+            
+                fixed_r, val_r = is_dirichlet(j, i+1)
+                if fixed_r:
+                    b[k] -= coeff_right * val_r
+
+                    print(f"--->yes is dirichlet: val_r = {val_r},  b[{k}] = {b[k]}")
+                else:
+                    add_entry(k, k_right, coeff_right)
+                    print(f"<---not dirichlet: add entry, r = {k} c= {k_right}, coeff={coeff_right}")
+                    
+            elif i == Nx-1:
+                # Right boundary: Neumann (zero derivative)
+
+                print(f"--right boundary--, i = {i}")
+                coeff_center_x = -2.0/dx**2
+                coeff_left = 2.0/dx**2
+
+                #print(f"-coeff_center_x ={coeff_center_x}  coeff_right ={coeff_right}")
+                
+                add_entry(k, k, coeff_center_x)
+
+                print(f"-->add entry, r = {k} c= {k}, coeff={coeff_center_x}")
+                
+                k_left = j * Nx + (i-1)
+
+                print(f"--#now consider neighbor  i-1 = {i-1} with k_left = j * Nx + (i-1) = {k_left}: is dirichlet?")
+                
+                fixed_l, val_l = is_dirichlet(j, i-1)
+                if fixed_l:
+                    b[k] -= coeff_left * val_l
+
+                    print(f"--->yes is dirichlet: val_l = {val_l},  b[{k}] = {b[k]}")
+                else:
+                    add_entry(k, k_left, coeff_left)
+                    print(f"<---not dirichlet: add entry, r = {k} c= {k_left}, data={coeff_left}")
+            else:
+                # Interior in x
+
+                print(f"--interior--, i = {i}")
+                
+                add_entry(k, k,  -2.0/dx**2)
+                print(f"-->add entry, r = {k} c= {k}, -2.0/dx**2={-2.0/dx**2}")
+                
+                # right neighbor
+                k_right = j * Nx + (i+1)
+                fixed_r, val_r = is_dirichlet(j, i+1)
+
+                print(f"--#now consider right neighbor  i+1 = {i+1} with k_right = j * Nx + (i+1) = {k_right}: is dirichlet?")
+                
+                if fixed_r:
+                    b[k] -= (1.0/dx**2)*val_r
+
+                    print(f"--->yes is dirichlet: val_r = {val_r},  b[{k}] = {b[k]}")
+                    
+                else:
+                    add_entry(k, k_right, 1.0/dx**2)
+
+                    print(f"<---not dirichlet: add entry, r = {k} c= {k_right}, 1.0/dx**2={1.0/dx**2}")
+                # left neighbor
+                k_left = j * Nx + (i-1)
+
+                print(f"--#now consider left neighbor  i-1 = {i-1} with k_left = j * Nx + (i-1) = {k_left}: is dirichlet?")
+                
+                fixed_l, val_l = is_dirichlet(j, i-1)
+                if fixed_l:
+                    b[k] -= (1.0/dx**2)*val_l
+
+                    print(f"--->yes is dirichlet: val_l = {val_l},  b[{k}] = {b[k]}")
+                else:
+                    add_entry(k, k_left, 1.0/dx**2)
+                    print(f"<---not dirichlet: add entry, r = {k} c= {k_left}, 1.0/dx**2={1.0/dx**2}")
+            
+            # z-direction
+
+            print(f"------------z direction-----------, j = {j}, k = {k}")
+            if j == 0 or j == Nz-1:
+                # These boundaries are Dirichlet (should have been caught)
+
+                print(f"j = {j} is dirichlet, already done ")
+                pass
+            else:
+                
+                add_entry(k, k, -2.0/dz**2)
+
+                #print(f"--add entry, r = {k} c= {k},  -2.0/dz**2={ -2.0/dz**2}")
+                
+                # Up neighbor (j+1)
+                k_up = (j+1)*Nx + i
+
+                print(f"--#now consider up neighbor  j+1 = {j+1} with k_up = (j+1) * Nx + i = {k_up}: is dirichlet?")
+                
+                fixed_up, val_up = is_dirichlet(j+1, i)
+                if fixed_up:
+                    b[k] -= (1.0/dz**2)*val_up
+
+                    print(f"--->yes is dirichlet: val_up = {val_up},  b[{k}] = {b[k]}")
+                else:
+                    add_entry(k, k_up, 1.0/dz**2)
+
+                    print(f"<---not dirichlet: add entry, r = {k} c= {k_up},  1.0/dz**2={ 1.0/dz**2}")
+                    
+                # Down neighbor (j-1)
+                k_down = (j-1)*Nx + i
+
+                print(f"--#now consider down neighbor  j-1 = {j-1} with k_down = (j-1) * Nx + i = {k_down}: is dirichlet?")
+                
+                fixed_down, val_down = is_dirichlet(j-1, i)
+                
+                if fixed_down:
+                    b[k] -= (1.0/dz**2)*val_down
+
+                    print(f"--->yes is dirichlet: val_down = {val_down},  b[{k}] = {b[k]}")
+                else:
+                    add_entry(k, k_down, 1.0/dz**2)
+                    print(f"<---not dirichlet: add entry, r = {k} c= {k_down},  1.0/dz**2={ 1.0/dz**2}")
+
+    # Build the sparse matrix in CSR format.
+    A = sparse.csr_matrix((data, (rows, cols)), shape=(N, N))
+
+    # Solve the linear system.
+    phi_flat = spsolve(A, b)
+    phi = phi_flat.reshape((Nz, Nx))
+    return b, A, x, z, phi
+
 
 
 # -------------------------

@@ -78,6 +78,8 @@ function generate_direction()
     vz = cost
     return (vx, vy, vz)
 end
+
+
 function simulate_photons_cylinder_axis(dSIPM, dEL, lEL; pTPB=0.65, pPTFE=0.9, N=100_000, seed=123, eps=1e-10)
     
 
@@ -88,42 +90,7 @@ function simulate_photons_cylinder_axis(dSIPM, dEL, lEL; pTPB=0.65, pPTFE=0.9, N
     p2 = pPTFE            # re-emission probability on subsequent barrel collisions (blue reflection).
     d_t = dSIPM / sqrt(2.0) # Acceptance radius at the top (z=Z).
 
-    count_top = 0
-
-    # --- Helper functions ---
-
-    # Generate initial position: (x, y, z=uniform in [0, Z])
-    function generate_position()
-        z0 = Z * rand()
-        return (0.0, 0.0, z0)
-    end
-
-
-
-    # Solve for time to hit the barrel (curved surface) given current (x,y) and direction (vx,vy)
     
-
-    # Solve for time to reach the top (z = Z).
-    function solve_t_top(z, vz)
-        if vz > eps
-            dt = (Z - z) / vz
-            if dt > eps
-                return dt
-            end
-        end
-        return nothing
-    end
-
-    # Solve for time to reach the bottom (z = 0).
-    function solve_t_bottom(z, vz)
-        if vz < -eps
-            dtb = -z / vz
-            if dtb > eps
-                return dtb
-            end
-        end
-        return nothing
-    end
 
     # --- Main simulation loop ---
     for _ in 1:N

@@ -2,6 +2,7 @@ using Random
 
 """
 Solve the intersection with the cylinder wall 
+
 """
 function solve_t_barrel(x, y, vx, vy, R; eps=1e-10)
     a = vx^2 + vy^2

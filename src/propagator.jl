@@ -1,6 +1,85 @@
+using Random
+
+"""
+Solve the intersection with the cylinder wall 
+"""
+function solve_t_barrel(x, y, vx, vy, R; eps=1e-10)
+    a = vx^2 + vy^2
+    b = 2 * (x * vx + y * vy)
+    c = x^2 + y^2 - R^2
+
+    if abs(a) < eps
+        return nothing
+    end
+
+    disc = b^2 - 4 * a * c
+    if disc < 0
+        return nothing
+    end
+
+    sqrt_disc = sqrt(disc)
+    t1 = (-b + sqrt_disc) / (2 * a)
+    t2 = (-b - sqrt_disc) / (2 * a)
+
+    ts_candidates = Float64[]
+    if t1 > eps
+        push!(ts_candidates, t1)
+    end
+    if t2 > eps
+        push!(ts_candidates, t2)
+    end
+
+    if !isempty(ts_candidates)
+        return minimum(ts_candidates)
+    else
+        return nothing
+    end
+end
+
+
+"""
+ Solve for time to reach the top (z = ztop).
+"""
+function solve_t_top(z, vz, ztop; eps=1e-10)
+    if vz > eps
+        dt = (ztop - z) / vz
+        if dt > eps
+            return dt
+        end
+    end
+    return nothing
+end
+
+
+"""
+ Solve for time to reach the bottom (z = zb).
+"""
+function solve_t_bottom(z, vz, zb; eps=1e-10)
+    if vz < -eps
+        dtb = zb-z / vz
+        if dtb > eps
+            return dtb
+        end
+    end
+    return nothing
+end
+
+
+"""
+Generate an isotropic 3D direction.
+"""
+function generate_direction()
+    cost = 2.0 * rand() - 1.0  # cosine(theta) uniformly in [-1, 1]
+    theta = acos(cost)         # theta in [0, π]
+    phi = 2.0 * pi * rand()      # phi in [0, 2π]
+    sinth = sqrt(1 - cost^2)
+    vx = sinth * cos(phi)
+    vy = sinth * sin(phi)
+    vz = cost
+    return (vx, vy, vz)
+end
 function simulate_photons_cylinder_axis(dSIPM, dEL, lEL; pTPB=0.65, pPTFE=0.9, N=100_000, seed=123, eps=1e-10)
-    using Random
-    Random.seed!(seed)
+    
 
     # Cylinder and acceptance parameters:
     R = dEL / 2.0           # Cylinder radius = diameter of EL hole / 2.
@@ -19,51 +98,10 @@ function simulate_photons_cylinder_axis(dSIPM, dEL, lEL; pTPB=0.65, pPTFE=0.9, N
         return (0.0, 0.0, z0)
     end
 
-    # Generate an isotropic 3D direction.
-    function generate_direction()
-        cost = 2.0 * rand() - 1.0  # cosine(theta) uniformly in [-1, 1]
-        theta = acos(cost)         # theta in [0, π]
-        phi = 2.0 * pi * rand()      # phi in [0, 2π]
-        sinth = sqrt(1 - cost^2)
-        vx = sinth * cos(phi)
-        vy = sinth * sin(phi)
-        vz = cost
-        return (vx, vy, vz)
-    end
+
 
     # Solve for time to hit the barrel (curved surface) given current (x,y) and direction (vx,vy)
-    function solve_t_barrel(x, y, vx, vy)
-        a = vx^2 + vy^2
-        b = 2 * (x * vx + y * vy)
-        c = x^2 + y^2 - R^2
-
-        if abs(a) < eps
-            return nothing
-        end
-
-        disc = b^2 - 4 * a * c
-        if disc < 0
-            return nothing
-        end
-
-        sqrt_disc = sqrt(disc)
-        t1 = (-b + sqrt_disc) / (2 * a)
-        t2 = (-b - sqrt_disc) / (2 * a)
-
-        ts_candidates = Float64[]
-        if t1 > eps
-            push!(ts_candidates, t1)
-        end
-        if t2 > eps
-            push!(ts_candidates, t2)
-        end
-
-        if !isempty(ts_candidates)
-            return minimum(ts_candidates)
-        else
-            return nothing
-        end
-    end
+    
 
     # Solve for time to reach the top (z = Z).
     function solve_t_top(z, vz)

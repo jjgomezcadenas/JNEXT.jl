@@ -61,10 +61,10 @@ begin
 	kV=1e+3V
 
 
-	x0 = 0.0    # center in x
-    y0 = 0.0    # center in y
-    d1 = 2.5    # hole diameter (in x-y plane)
-    p  = 5.0    # pitch (used here to define domain size in x and y)
+	x0 = 3.0    # center in x
+    y0 = 3.0    # center in y
+    d1 = 3.0    # hole diameter (in x-y plane)
+    p  = 6.0    # pitch (used here to define domain size in x and y)
     z0 = -10.0  # ground position
     za= -5.0    # anode position
     zg= 0.0     # gate position
@@ -78,8 +78,8 @@ begin
 	
 	par = jn.JNEXT.ParH3D(x0, y0, d1, p, z0, za, zg, zc, V0, Va, Vg, Vc)
     
-	Nx = 100
-	Ny = 100
+	Nx = 90
+	Ny = 90
 	Nz = 100
 
 	x_min = par.x0 - par.p/2 
@@ -91,6 +91,8 @@ begin
     dx = (x_max - x_min) / (Nx - 1)
     dy = (y_max - y_min) / (Ny - 1)
     dz = (par.zc - par.z0) / (Nz - 1)
+
+	file = string("phi3d_d", string(Int(d1)), "_p_", string(Int(p)),".jld2")
 	
 	md"""
 	Gala3D structure: 
@@ -102,6 +104,7 @@ begin
 	- Domain in x between $(x_min) and $(x_max) 
 	- Domain in y between $(y_min) and $(y_max)
 	- Grid spacing: dx =$(dx), dy = $(dy), dz = $(dz)
+	- file name = $(file)
 	"""
 	
 end
@@ -118,13 +121,13 @@ md"""
 if ComputePhi3d
 	let
 		phi_full, xd, yd, zd = jn.JNEXT.phi3D(par, Nx, Ny, Nz)
-		@save "phi3d_data.jld2" phi_full xd yd zd
+		@save file phi_full xd yd zd
 	end
 end
 	
 
 # ╔═╡ 717fc78b-6fa1-4251-ac69-d268b7cca214
-@load "phi3d_data.jld2" phi_full xd yd zd
+@load file phi_full xd yd zd
 
 # ╔═╡ 53f9bd98-de0e-45b4-a1fd-48b4ebdbffdf
 #phi3ds, xs, ys, zs = jn.JNEXT.phi3D_sor(par, Nx, Ny, Nz; ω=1.5, tol=1e-6, max_iter=10000)
@@ -137,6 +140,9 @@ end
 
 # ╔═╡ 7e7ae9ed-dc26-409c-aedf-3d27a797dc13
 E_x, E_y, E_z = jn.JNEXT.exyz(xd, yd, zd, phi_full, Nx, Ny, Nz)
+
+# ╔═╡ bc5b571d-f658-4a30-b884-ac11ebabedf2
+
 
 # ╔═╡ e0dc020b-d422-41b0-8362-820f1491a36e
 md"""
@@ -188,6 +194,9 @@ ftrj
 
 # ╔═╡ ce25e8f5-2616-42a3-bd35-dbd8d69bd37f
 btrj
+
+# ╔═╡ 1b19e24d-5d81-4125-a3bf-6441654f05b8
+@save "trajectories_data.jld2" ftrj btrj
 
 # ╔═╡ 886229eb-2bdc-4396-9360-a2dedcf12d0a
 function meshgrid(x::AbstractVector, y::AbstractVector)
@@ -509,6 +518,8 @@ ps = plot_surface_z(phi_full, xd, yd, zd; z_idx=round(Int, 30), figsize=(8,6))
 # ╠═97fd6c0b-cf19-4e0b-87b5-113a8a9da7be
 # ╠═ce25e8f5-2616-42a3-bd35-dbd8d69bd37f
 # ╠═5c65025b-be1e-4e49-a81d-3c017f5292a1
+# ╠═1b19e24d-5d81-4125-a3bf-6441654f05b8
+# ╠═bc5b571d-f658-4a30-b884-ac11ebabedf2
 # ╠═e0dc020b-d422-41b0-8362-820f1491a36e
 # ╠═05692202-4939-406e-ab7d-4a91daa10478
 # ╠═886229eb-2bdc-4396-9360-a2dedcf12d0a

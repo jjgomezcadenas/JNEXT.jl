@@ -313,6 +313,9 @@ end
 # ╔═╡ 87a9b642-5415-4e67-954c-77d6c31efd47
 btrj
 
+# ╔═╡ e5eeb5ca-7e87-477a-8f2b-77ba862e3f6c
+plot_electron_trajectories(ftrj, btrj, params=gparams)
+
 # ╔═╡ 4dbb9707-a9e5-4ed5-bb25-0969cc716623
 gparams
 
@@ -370,9 +373,6 @@ function plot_electron_trajectories(ftrj, btrj; params)
     return plt
 end
 
-
-# ╔═╡ e5eeb5ca-7e87-477a-8f2b-77ba862e3f6c
-plot_electron_trajectories(ftrj, btrj, params=gparams)
 
 # ╔═╡ 42c99bde-ff81-4aad-a9d3-3c26e54d8c65
 

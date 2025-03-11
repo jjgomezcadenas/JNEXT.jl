@@ -141,6 +141,9 @@ end
 # ╔═╡ 7e7ae9ed-dc26-409c-aedf-3d27a797dc13
 E_x, E_y, E_z = jn.JNEXT.exyz(xd, yd, zd, phi_full, Nx, Ny, Nz)
 
+# ╔═╡ 1b19e24d-5d81-4125-a3bf-6441654f05b8
+@save tfile ftrj btrj
+
 # ╔═╡ bc5b571d-f658-4a30-b884-ac11ebabedf2
 
 
@@ -194,9 +197,6 @@ ftrj
 
 # ╔═╡ ce25e8f5-2616-42a3-bd35-dbd8d69bd37f
 btrj
-
-# ╔═╡ 1b19e24d-5d81-4125-a3bf-6441654f05b8
-@save tfile ftrj btrj
 
 # ╔═╡ 886229eb-2bdc-4396-9360-a2dedcf12d0a
 function meshgrid(x::AbstractVector, y::AbstractVector)

@@ -23,8 +23,7 @@ end
 
 # ╔═╡ a333497c-c5fc-49a7-a8ca-d82a7dcd27ad
 begin
-	import GLMakie
-	using GeometryBasics
+	import PyPlot
 end
 
 # ╔═╡ 57248e63-9e36-4644-a6c4-5a3aa1808e29
@@ -163,50 +162,17 @@ begin
 	"""
 end
 
-# ╔═╡ 8c7035f0-82fd-4c86-ab63-5cdd3b4d7539
-function plot_cylinder(gammas, x0, y0, zg, zb, za, r; num_plot=5)
-	
-	fx = GLMakie.Figure(size = (1600, 800))
-	ax = GLMakie.LScene(fx[1,1], show_axis = true)
-	
+# ╔═╡ 42392447-15b4-48ed-ad52-cf00aefc435f
+sqrt((3-3.405)^2 +(3-1.555)^2)
 
-# Draw the cylinder.
-# Define the cylinder with its top and bottom end-caps. Here we assume:
-# - The cylinder's top endcap is at Zg and bottom at Zb.
-# - The cylinder is centered at a point and oriented along the z-axis.
-# Adjust the parameters as needed.
-# In this example, we create a cylinder with:
-#   Center of bottom: (1.0, 1.0, 1.0), 
-#   Center of top:    (1.0, 1.0, 4.0), 
-#   Radius: 2.0
-	cyl=Cylinder(Point3(x0,y0,zb), Point3(x0,y0,zg), r)
-	cyl2=Cylinder(Point3(x0,y0,za), Point3(x0,y0,zg), r)
-	GLMakie.wireframe!(ax, cyl, color = (:black, 0.2), linewidth = 1, transparency = true)
-	GLMakie.wireframe!(ax, cyl2, color = (:blue, 0.2), linewidth = 1, transparency = true)
+# ╔═╡ 604a8022-d687-4684-8fd2-0178a3192452
+sqrt(0.5^2 +0.6^2 + 0.62^2)
 
-	# Define a set of colors to cycle through for different gammas.
-	colors = [:red, :blue, :green, :orange, :purple, :cyan, :magenta, :yellow]
+# ╔═╡ 1dad2fcb-836e-46a8-bb2b-8d43f25c4767
 
-	# Loop over the selected gammas.
-	for i in 1:min(num_plot, length(gammas))
-	    gamma = gammas[i]
-	    # Extract x, y, z coordinates for each step in the gamma.
-	    xs = [step[1] for step in gamma]
-	    ys = [step[2] for step in gamma]
-	    zs = [step[3] for step in gamma]
-	    
-	    # Choose a color for this gamma (cycling if needed).
-	    col = colors[mod1(i, length(colors))]
-	    
-	    # Plot each step as a scatter point.
-	    GLMakie.scatter!(ax, xs, ys, zs, markersize = 5, color = col)
-	    
-	    # Connect the steps with a dashed line.
-	    GLMakie.lines!(ax, xs, ys, zs, color = col, linestyle = :dash, linewidth = 1)
-end
 
-	fx
-end
+# ╔═╡ 23d039f4-b1db-4778-be0b-2fa01075a1a2
+#plot_trajectory(tr, elcc, sipm)
 
 # ╔═╡ 0e31a7b1-e95c-477a-9212-a5a1726370e5
 # Example usage:
@@ -216,201 +182,173 @@ end
 # p2 = plot_trajectory_xz(traj_ext, photon_impact)
 # display(p2)
 
-# ╔═╡ 42d12a7c-e067-4342-860e-ad3530913094
-md"""
-### Intersection of a Line with a Finite Cylinder
-
-#### 1. Equation of the Line
-The line is given in parametric form as:
-\[
-\begin{aligned}
-x(t) &= x + v_x\,t,\\[1mm]
-y(t) &= y + v_y\,t,\\[1mm]
-z(t) &= z + v_z\,t,
-\end{aligned}
-\]
-where \((x,y,z)\) is a point on the line and \((v_x,v_y,v_z)\) are the direction cosines.
-
-#### 2. Description of the Cylinder
-The cylinder is defined by:
-- **Lateral Surface:** All points satisfying
-  \[
-  (x - x_0)^2 + (y - y_0)^2 = R^2,
-  \]
-  where \((x_0, y_0)\) is the center of the cylinder’s circular cross-section in the \(xy\)-plane and \(R\) is the cylinder’s radius.
-- **End-Caps:** Two horizontal planes at:
-  \[
-  z = z_a \quad (\text{top cap}) \quad \text{and} \quad z = z_b \quad (\text{bottom cap}),
-  \]
-  with \(z_a > z_b\).
-
-#### 3. Intersection with the Lateral Surface
-Substitute the parametric equations of the line into the cylinder’s equation:
-\[
-\bigl(x + v_x\,t - x_0\bigr)^2 + \bigl(y + v_y\,t - y_0\bigr)^2 = R^2.
-\]
-Expanding, we obtain a quadratic in \(t\):
-\[
-(v_x^2 + v_y^2)t^2 + 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr]t + \Bigl[(x-x_0)^2+(y-y_0)^2 - R^2\Bigr] = 0.
-\]
-Let
-\[
-a = v_x^2 + v_y^2,\quad b = 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr],\quad c = (x-x_0)^2 + (y-y_0)^2 - R^2.
-\]
-Then the quadratic equation is:
-\[
-a\,t^2 + b\,t + c = 0.
-\]
-The solutions are:
-\[
-t = \frac{-b \pm \sqrt{b^2-4ac}}{2a}.
-\]
-For real intersections, the discriminant \(D = b^2 - 4ac\) must be non-negative. For each valid \(t\), the \(z\)-coordinate is given by:
-\[
-z(t) = z + v_z\,t,
-\]
-and must satisfy \(z_b \le z(t) \le z_a\) to lie within the finite cylinder.
-
-#### 4. Intersection with the End-Caps
-
-**Top End-Cap (at \(z = z_a\)):**
-- Set the \(z\) equation equal to \(z_a\):
-  \[
-  z + v_z\,t = z_a \quad \Longrightarrow \quad t = \frac{z_a - z}{v_z}\quad (v_z \neq 0).
-  \]
-- The corresponding \(x\) and \(y\) coordinates are:
-  \[
-  x(t) = x + v_x\,t,\quad y(t) = y + v_y\,t.
-  \]
-- This intersection is valid if:
-  \[
-  (x(t)-x_0)^2 + (y(t)-y_0)^2 \le R^2.
-  \]
-
-**Bottom End-Cap (at \(z = z_b\)):**
-- Similarly, set:
-  \[
-  z + v_z\,t = z_b \quad \Longrightarrow \quad t = \frac{z_b - z}{v_z}\quad (v_z \neq 0).
-  \]
-- The intersection is valid if:
-  \[
-  (x(t)-x_0)^2 + (y(t)-y_0)^2 \le R^2.
-  \]
-
-#### Summary
-- **Lateral Surface Intersection:**  
-  Solve:
-  \[
-  a\,t^2 + b\,t + c = 0,\quad \text{where } a = v_x^2+v_y^2,\quad b = 2\bigl[v_x(x-x_0)+v_y(y-y_0)\bigr],\quad c = (x-x_0)^2+(y-y_0)^2-R^2.
-  \]
-  Then ensure that \(z + v_z\,t\) lies between \(z_b\) and \(z_a\).
-
-- **Top End-Cap Intersection:**  
-  \[
-  t = \frac{z_a - z}{v_z},\quad \text{with } (x+v_x\,t-x_0)^2 + (y+v_y\,t-y_0)^2 \le R^2.
-  \]
-
-- **Bottom End-Cap Intersection:**  
-  \[
-  t = \frac{z_b - z}{v_z},\quad \text{with } (x+v_x\,t-x_0)^2 + (y+v_y\,t-y_0)^2 \le R^2.
-  \]
-
-These equations allow you to determine the parameter \(t\) at which a line (defined by a point \((x,y,z)\) and direction \((v_x,v_y,v_z)\)) intersects either the lateral surface or the end-caps of a finite cylinder.
-
-"""
-
-# ╔═╡ 1323fe1d-2604-4002-bb58-e8a68cb685b7
-md"""
-\documentclass{article}
-\usepackage{amsmath}
-\usepackage{amssymb}
-\begin{document}
-
-\section*{Intersection of a Line with a Finite Cylinder}
-
-\subsection*{1. The Line}
-The line is given in parametric form by:
-\[
-\begin{aligned}
-x(t) &= x + v_x\,t,\\[1mm]
-y(t) &= y + v_y\,t,\\[1mm]
-z(t) &= z + v_z\,t,
-\end{aligned}
-\]
-where \((x,y,z)\) is a point on the line and \((v_x,v_y,v_z)\) are its direction cosines.
-
-\subsection*{2. The Cylinder}
-The cylinder is defined by:
-\begin{itemize}
-  \item \textbf{Lateral Surface:} All points \((x,y,z)\) satisfying
-  \[
-  (x - x_0)^2 + (y - y_0)^2 = R^2,
-  \]
-  where \((x_0,y_0)\) is the center of the circular cross-section and \(R\) is the radius.
-  \item \textbf{End-Caps:} The top and bottom are given by the horizontal planes
-  \[
-  z = z_a \quad \text{(top cap)} \quad \text{and} \quad z = z_b \quad \text{(bottom cap)},
-  \]
-  with \(z_a > z_b\).
-\end{itemize}
-
-\subsection*{3. Intersection with the Lateral Surface}
-Substitute the line equations into the cylinder equation:
-\[
-\bigl(x + v_x t - x_0\bigr)^2 + \bigl(y + v_y t - y_0\bigr)^2 = R^2.
-\]
-Expanding, we obtain a quadratic in \(t\):
-\[
-(v_x^2 + v_y^2)t^2 + 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr]t + \Bigl[(x-x_0)^2+(y-y_0)^2 - R^2\Bigr] = 0.
-\]
-Define:
-\[
-\begin{aligned}
-a &= v_x^2 + v_y^2,\\[1mm]
-b &= 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr],\\[1mm]
-c &= (x-x_0)^2+(y-y_0)^2 - R^2.
-\end{aligned}
-\]
-Thus, the quadratic becomes:
-\[
-a\,t^2 + b\,t + c = 0,
-\]
-with solutions:
-\[
-t = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}.
-\]
-The discriminant \(D = b^2 - 4ac\) must be non-negative for real intersections. For each valid \(t\), the \(z\)-coordinate is
-\[
-z(t) = z + v_z\,t,
-\]
-which must satisfy:
-\[
-z_b \le z + v_z\,t \le z_a.
-\]
-
-\subsection*{4. Intersection with the End-Caps}
-\paragraph*{Top End-Cap (at \(z=z_a\)):}
-Set:
-\[
-z + v_z\,t = z_a \quad \Longrightarrow \quad t = \frac{z_a - z}{v_z} \quad (v_z \neq 0).
-\]
-The corresponding \((x,y)\) coordinates are:
-\[
-x(t) = x + v_x\,t, \quad y(t) = y + v_y\,t.
-\]
-This intersection is valid if:
-\[
-(x(t)-x_0)^2+(y(t)-y_0)^2 \le R^2.
-\]
-
-\paragraph*{Bottom End-Ca
-
-"""
-
 # ╔═╡ b56be6ba-7e8a-48c2-a2d3-7b4e27e4f03c
 md"""
 # Functions
 """
+
+# ╔═╡ f6e1dced-e962-4884-83aa-9f181a65982e
+function meshgrid(x::AbstractVector, y::AbstractVector)
+    X = repeat(reshape(x, 1, length(x)), length(y), 1)
+    Y = repeat(reshape(y, length(y), 1), 1, length(x))
+    return X, Y
+end
+
+# ╔═╡ 5f2f631e-f305-49c2-88f4-dbf9be2c97a5
+begin
+	struct Cylinder
+	    r::Float64      # radius
+		x0::Float64     # cylinder center
+		y0::Float64     # cylinder center
+	    zmin::Float64   # lower z-boundary
+	    zmax::Float64   # upper z-boundary
+	    p0::Vector{Float64}  # point on one end (computed)
+	    p1::Vector{Float64}  # point on the other end (computed)
+	   
+	end
+	"""Outer constructor computes additional fields."""
+	function Cylinder(r::Float64, x0::Float64, y0::Float64, 
+		               zmin::Float64, zmax::Float64)
+	    p0 = [x0, y0, zmin]   # point at one end
+	    p1 = [x0, y0, zmax]   # point at the other end
+	    cyl = Cylinder(r, x0, y0, zmin, zmax, p0, p1)
+	    return cyl
+	end
+end
+
+# ╔═╡ ba7cb219-b68d-4414-9da0-e0c113db5c24
+begin
+	clength(c::Cylinder) = c.zmax - c.zmin
+	perimeter(c::Cylinder) = 2 * π * c.r
+	area_barrel(c::Cylinder) = 2 * π * c.r * length(c)
+	area_endcap(c::Cylinder) = π * c.r^2
+	area(c::Cylinder) = area_barrel(c) + 2 * area_endcap(c)
+	volume(c::Cylinder) = π * c.r^2 * length(c)
+end
+
+# ╔═╡ d6f88078-ee18-4ff0-a2a1-67e6005d0b39
+function unit_vectors(c::Cylinder)
+	    v = c.p1 .- c.p0
+	    mag = norm(v)
+	    v = v / mag
+	    not_v = [1.0, 0.0, 0.0]
+	    # Check if v is approximately (1,0,0)
+	    if all(isapprox.(v, not_v))
+	        not_v = [0.0, 1.0, 0.0]
+	    end
+	    n1 = cross(v, not_v)
+	    n1 /= norm(n1)
+	    n2 = cross(v, n1)
+	    return mag, v, n1, n2
+	end
+
+# ╔═╡ f400c977-03df-4ea3-b93a-c66bd386ab04
+function surfaces(c::Cylinder)
+
+	mag, v, n1, n2 = unit_vectors(c)
+	
+	# Create parameter ranges:
+	t = collect(range(0, stop=mag, length=2))   # for the axis (2 sample points)
+	theta = collect(range(0, stop=2*pi, length=100))    # angular parameter
+	rsample = collect(range(0, stop=c.r, length=2))     # for endcaps
+
+	# Create meshgrid arrays.
+	T, Theta2 = meshgrid(t, theta)        # for the barrel
+	R, Theta  = meshgrid(rsample, theta)   # for the endcaps
+
+
+	# Barrel ("tube"): generate coordinates over the lateral surface.
+	    X = c.p0[1] .+ v[1]*T .+ c.r .* sin.(Theta2) .* n1[1] .+ c.r .* cos.(Theta2) .* n2[1]
+	    Y = c.p0[2] .+ v[2]*T .+ c.r .* sin.(Theta2) .* n1[2] .+ c.r .* cos.(Theta2) .* n2[2]
+	    Z = c.p0[3] .+ v[3]*T .+ c.r .* sin.(Theta2) .* n1[3] .+ c.r .* cos.(Theta2) .* n2[3]
+	    
+	    # Bottom endcap (at zmin)
+	    X2 = c.p0[1] .+ R .* sin.(Theta) .* n1[1] .+ R .* cos.(Theta) .* n2[1]
+	    Y2 = c.p0[2] .+ R .* sin.(Theta) .* n1[2] .+ R .* cos.(Theta) .* n2[2]
+	    Z2 = c.p0[3] .+ R .* sin.(Theta) .* n1[3] .+ R .* cos.(Theta) .* n2[3]
+	    
+	    # Top endcap (at zmax)
+	    X3 = c.p0[1] .+ v[1]*mag .+ R .* sin.(Theta) .* n1[1] .+ R .* cos.(Theta) .* n2[1]
+	    Y3 = c.p0[2] .+ v[2]*mag .+ R .* sin.(Theta) .* n1[2] .+ R .* cos.(Theta) .* n2[2]
+	    Z3 = c.p0[3] .+ v[3]*mag .+ R .* sin.(Theta) .* n1[3] .+ R .* cos.(Theta) .* n2[3]
+	    
+	    return (X, Y, Z), (X2, Y2, Z2), (X3, Y3, Z3)
+end
+
+# ╔═╡ 57dec276-2cd4-4f12-9595-8cb42cbf08d9
+function draw_cylinder2(c; alpha=0.2, figsize=(16,16), 
+                        DWORLD=false, 
+                        WDIM=((0.0,4.5), (0.0,4.5), (-10.0,0)),
+                        barrelColor="blue", cupColor="red")
+	
+	fig = PyPlot.figure(figsize=figsize)
+    ax = PyPlot.subplot(111, projection="3d")
+
+	P, P2, P3 = surfaces(c)
+
+	if DWORLD
+        ax.set_xlim3d(0.0, 10.0)
+        ax.set_ylim3d(0.0, 10.0)
+        ax.set_zlim3d(-10.0, 0.0)
+    end
+
+	ax.plot_surface(P[1], P[2], P[3], color=barrelColor, alpha=alpha)
+	ax.plot_surface(P2[1], P2[2], P2[3], color=cupColor, alpha=alpha)
+    ax.plot_surface(P3[1], P3[2], P3[3], color=cupColor, alpha=alpha)
+
+	
+	ax, fig
+end
+
+# ╔═╡ 8c7035f0-82fd-4c86-ab63-5cdd3b4d7539
+function plot_cylinder(gammas, x0, y0, zg, zb, za, r; num_plot=5, figsize=(16,16))
+	
+	c2 = Cylinder(r, x0, y0, zb, zg)
+	ax, fig = draw_cylinder2(c2; alpha=0.2, figsize=figsize, DWORLD=false)
+
+	# Define a set of colors to cycle through for different gammas.
+	colors = [:red, :blue, :green, :orange, :purple, :cyan, :magenta, :yellow]
+
+	# Loop over the selected gammas.
+	#for i in 1:min(num_plot, length(gammas))
+	i = num_plot
+	gamma = gammas[i]
+	# Extract x, y, z coordinates for each step in the gamma.
+	xs = [step[1] for step in gamma]
+	ys = [step[2] for step in gamma]
+	zs = [step[3] for step in gamma]
+	
+	# Choose a color for this gamma (cycling if needed).
+	#col = colors[mod1(i, length(colors))]
+	
+	ax.scatter(xs, ys, zs, s=25, color=:red)
+
+	println("xs =",xs)
+	println("ys =",ys)
+	println("zs =",zs)
+
+	# Connect the points with a dashed line.
+	 ax.plot(xs, ys, zs, linestyle="--", color=:red, linewidth=1)
+	#end
+
+	fig
+end
+
+# ╔═╡ 94a48200-aca1-4167-9e45-581e53cfdad5
+"""Normal to the cylinder barrel"""
+function normal_to_barrel(c::Cylinder, P::Vector{Float64})    
+    [P[1], P[2], 0] ./ c.r
+end
+
+# ╔═╡ c2f6d14e-cfb7-4f53-88cc-9da2676f1ecb
+"""
+Uses equation of cylynder: 
+
+F(x,y,z) = x^2 + y^2 - r^2 = 0
+"""
+function cylinder_equation(c::Cylinder, P::Vector{Float64})
+    P[1]^2 + P[2]^2 - c.r^2
+end
 
 # ╔═╡ 3c238213-30c7-41a7-bd7b-50f8c09b7adf
 """
@@ -450,10 +388,10 @@ function get_coord_and_yield(tr::AbstractMatrix, zg::Float64, ymm::Float64)
  Solve for time to reach the top (z = ztop).
 """
 function solve_t_top(z, vz, ztop; eps=1e-10)
-	println("solve_t_top: z = $(z), vz=$(vz), ztop=$(ztop)")
+	println("####solve_t_top: z = $(z), vz=$(vz), ztop=$(ztop)")
     if vz > eps
         dt = (ztop - z) / vz
-		println("solve_t_top: dt = $(dt)")
+		println("####solve_t_top: dt = $(dt)")
         if dt > eps
             return dt
         end
@@ -469,10 +407,10 @@ end
  Solve for time to reach the bottom (z = zb).
 """
 function solve_t_bottom(z, vz, zb; eps=1e-10)
-	println("solve_t_bottom: z = $(z), vz=$(vz), zb=$(zb)")
+	println("####solve_t_bottom: z = $(z), vz=$(vz), zb=$(zb)")
     if vz < -eps
         dtb = (abs(zb) -abs(z)) / abs(vz)
-		println("solve_t_bottom: dt = $(dtb)")
+		println("####solve_t_bottom: dt = $(dtb)")
         if dtb > eps
             return dtb
         end
@@ -485,19 +423,19 @@ end
 	Solve the intersection with the cylinder wall 
 	
 """
-function solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=1e-10)
+function solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=1e-16)
 	a = vx^2 + vy^2
-	b = 2 * (x * vx + y * vy)
+	b = 2 * ((x-x0) * vx + (y-y0) * vy)
 	c = (x - x0)^2 + (y - y0)^2 - R^2
 
-	println("solve_t_barrel: x-x0 = $(x-x0), y-y0=$(y-y0), vx = $(vx), vy=$(vy),R = $(R)")
-	println("a = $(a), b = $(b), c = $(c)")
+	#println("####solve_t_barrel: x-x0 = $(x-x0), y-y0=$(y-y0), vx = $(vx), vy=$(vy),R = $(R)")
+	#println("####a = $(a), b = $(b), c = $(c)")
 	if abs(a) < eps
 		return nothing
 	end
 
 	disc = b^2 - 4 * a * c
-	println("disc = $(disc)")
+	#println("####disc = $(disc)")
 	if disc < 0
 		return nothing
 	end
@@ -506,14 +444,26 @@ function solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=1e-10)
 	t1 = (-b + sqrt_disc) / (2 * a)
 	t2 = (-b - sqrt_disc) / (2 * a)
 
-	println("t1 = $(t1), t2 = $(t2)")
+	println("####t1 = $(t1), t2 = $(t2)")
 
 	ts_candidates = Float64[]
-	if t1 > eps
+	#if t1 > 0
+	#	push!(ts_candidates, t1)
+	#elseif abs(t1) < eps
+	#	push!(ts_candidates, 0.0)
+	#end
+	#if t2 > 0
+	#	push!(ts_candidates, t2)
+	#elseif abs(t2) < eps
+	#	push!(ts_candidates, 0.0)
+	#end
+
+	if t1 > 0 && t2 <= 0
 		push!(ts_candidates, t1)
-	end
-	if t2 > eps
+	elseif t2 >0 && t1 <= 0
 		push!(ts_candidates, t2)
+	elseif abs(t1) < eps || abs(t2) < eps
+		push!(ts_candidates, 0.0)
 	end
 
 	if !isempty(ts_candidates)
@@ -707,7 +657,7 @@ Count photons that hit a SiPM (if the impact falls within a sensor active area).
 function simulate_photons_along_trajectory(electron_pos::Vector{Float64},                                                       trj::AbstractMatrix, 
 	                                       elcc::ELCCGeometry,
 	                                       sipm::SiPMGeometry; 
-										   ymm=10, p1=0.95, p2=0.5, eps=1e-10)
+										   ymm=10, p1=1.00, p2=0.5, eps=1e-12)
 	
 	sipm_indices, sipm_origin =find_sipm(electron_pos, sipm)
 	dice_indices, dice_origin, xlocal = find_dice(electron_pos, elcc)
@@ -725,6 +675,8 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 	println("->electron position relative to dice $(xl)")
 	println("->dice indices $(dice_indices), origin =$(dice_origin)")
 	println("->sipm indices $(sipm_indices), origin =$(sipm_origin)")
+
+	c2 = Cylinder(R, x0, y0, zbot, ztop)
 	
 	YL, XC, YC, ZC = get_coord_and_yield(trj, ztop, ymm)
 
@@ -740,12 +692,16 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 		yy = YL[i]
 		count_top = 0
 		count_bot = 0
+		println("--------000-------")
 		println("-->for step =$(i), xe = $(xe), y=$(ye), z=$(ze), yield=$(yy)")
 
 		
 		for ng in range(1, yy) # number of photons per step
 			vx, vy, vz= generate_direction() # generate random direction
+			
+			println("------xxxx--------")
 			println("--->for ng =$(ng), vx =$(vx), vy =$(vy), vz = $(vz)")
+			println("------xxxx--------")
 
 			n_collisions = 0
 			
@@ -757,7 +713,7 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 			z = ze
 
 	        while alive
-	            t_barrel = solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=eps)
+	            t_barrel = solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=1e-16)
 	            t_top    = solve_t_top(z, vz, ztop; eps=eps)
 	            t_bottom = solve_t_bottom(z, vz, zbot; eps=eps)
 				
@@ -805,7 +761,7 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 	                
 	                count_bot += 1
 	                alive = false
-					println("--->photon hits sipm at x =$(x_new), y = $(y_new), count =$(count_bot)")
+					println("--->photon hits bottom at x =$(x_new), y = $(y_new), count =$(count_bot)")
 					push!(gammas, steps)
 
 					# find absolute position
@@ -819,28 +775,48 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 	                # Photon is lost when reaching the top (gate).
 	                alive = false
 					count_top += 1
-					println("--->photon goes backward, count =$(count_top)")
+					println("--->photon hits top at x =$(x_new), y = $(y_new), count =$(count_top)")
 					push!(gammas, steps)
 	
 	            else  # "barrel"
 	                n_collisions += 1
-					println("--->photon hits the barrel, n_collisions =$(n_collisions)")
+					
+					println("--->photon hits barrel at x =$(x_new), y = $(y_new), n_collisions =$(n_collisions)")
+					
 	                # Determine re-emission probability.
 	                p = (n_collisions == 1) ? p1 : p2
-	                if rand() < p
-	                    # Photon is re-emitted 
-	                    x, y, z = x_new, y_new, z_new
-	                    vx, vy, vz = generate_direction()
+	                
+	                # Photon is re-emitted 
+	                x, y, z = x_new, y_new, z_new
+					vx0, vy0, vz0 = vx, vy, vz
+	                    
 
-						println("---->photon reemited in barrel")
-						println("x = $(x), y=$(y), z=$(z)")
-						println("vx = $(x), vy=$(y), vz=$(z)")
-	                else
-	                    # Photon is lost if not re-emitted.
-						println("---->photon absorbed in barrel")
-	                    alive = false
-						push!(gammas, steps)
-	                end
+					cteta = 1.0
+					while cteta >= 0
+						p = (n_collisions == 1) ? p1 : p2
+						if rand() < p # Photon is re-emitted 
+							vx, vy, vz = generate_direction()
+							cteta = dot([vx,vy,vz],[vx0,vy0,vx0])
+							println("---->photon reemited in barrel")
+							println("vx = $(vx), vy=$(vy), vz=$(vz)")
+							println("cos(theta) =", cteta)
+
+							if cteta >=0
+								println("---->hit wall, n_collisions=", n_collisions)
+							end
+							
+						else   # Photon is absorbed
+							println("---->photon absorbed in barrel")
+							alive = false
+							push!(gammas, steps)
+							break
+						end
+						 n_collisions += 1
+					end
+	                    
+					println("x = $(x), y=$(y), z=$(z)")
+					println("vx = $(vx), vy=$(vy), vz=$(vz)")
+					
             	end
 			end
 		end
@@ -849,7 +825,7 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 end
 
 # ╔═╡ b4bec083-392c-45f3-b440-91edd3b5e5fc
-gammas = simulate_photons_along_trajectory(electron_pos, tr, elcc, sipm; ymm=ymm/2)
+gammas = simulate_photons_along_trajectory(electron_pos, tr, elcc, sipm; p1=1.00, p2=0.7, ymm=ymm/2)
 
 # ╔═╡ 198f564c-7588-459f-86b9-69e36606fa7e
 typeof(gammas)
@@ -858,7 +834,16 @@ typeof(gammas)
 gammas
 
 # ╔═╡ 8f537416-301f-427f-a584-b91cbd83450d
- plot_cylinder(gammas, 3.0, 3.0, 0.0, -5.0, -10.0, 1.5; num_plot=1 )
+begin
+ 	fig = plot_cylinder(gammas, 3.0, 3.0, 0.0, -5.0, -10.0, 1.5; num_plot=18)
+	
+end
+
+# ╔═╡ 02ffafb2-8ca6-4fcd-a267-c5e7528137cc
+PyPlot.close(fig)
+
+# ╔═╡ e97ec2de-accb-4336-bf0e-2247bbaeb3e2
+gammas
 
 # ╔═╡ 82882beb-98b0-4a53-9f0d-9d16bcbc6c09
 """
@@ -1215,9 +1200,6 @@ function plot_trajectory(traj::AbstractMatrix,
     plot(p1,p2)
 end
 
-# ╔═╡ 23d039f4-b1db-4778-be0b-2fa01075a1a2
-plot_trajectory(tr, elcc, sipm)
-
 # ╔═╡ a91f3f93-ffec-47fc-819e-e4f43bee7f95
 """
 Simulation 
@@ -1244,6 +1226,121 @@ function run_simulation(elcc::ELCCGeometry, sipm::SiPMGeometry, electron_pos::Tu
     
     return (traj, dice_indices, dice_origin, xlocal, traj, photon_info)
 end
+
+# ╔═╡ 42d12a7c-e067-4342-860e-ad3530913094
+md"""
+### Intersection of a Line with a Finite Cylinder
+
+#### 1. Equation of the Line
+The line is given in parametric form as:
+
+``
+\begin{aligned}
+x(t) &= x + v_x\,t,\\,
+y(t) &= y + v_y\,t,\\,
+z(t) &= z + v_z\,t,
+\end{aligned}
+``
+
+where ``(x,y,z)`` is a point on the line and ``(v_x,v_y,v_z)`` are the direction cosines.
+
+#### 2. Description of the Cylinder
+
+The cylinder is defined by:
+
+- **Lateral Surface:** All points satisfying
+
+  ``
+  (x - x_0)^2 + (y - y_0)^2 = R^2,
+  ``
+
+  where ``(x_0, y_0)`` is the center of the cylinder’s circular cross-section in the ``xy``-plane and ``R`` is the cylinder’s radius.
+
+- **End-Caps:** Two horizontal planes at:
+
+  ``
+  z = z_a \quad (\text{top cap}) \quad \text{and} \quad z = z_b \quad (\text{bottom cap}),
+  ``
+
+  with ``z_a > z_b``.
+
+#### 3. Intersection with the Lateral Surface
+Substitute the parametric equations of the line into the cylinder’s equation:
+
+``
+\bigl(x + v_x\,t - x_0\bigr)^2 + \bigl(y + v_y\,t - y_0\bigr)^2 = R^2.
+``
+
+Expanding, we obtain a quadratic in \(t\):
+
+``
+(v_x^2 + v_y^2)t^2 + 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr]t + \Bigl[(x-x_0)^2+(y-y_0)^2 - R^2\Bigr] = 0.
+``
+
+Let
+
+``
+a = v_x^2 + v_y^2,\quad b = 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr],\quad c = (x-x_0)^2 + (y-y_0)^2 - R^2.
+``
+
+Then the quadratic equation is:
+
+``
+a\,t^2 + b\,t + c = 0.
+``
+
+The solutions are:
+
+``
+t = \frac{-b \pm \sqrt{b^2-4ac}}{2a}.
+``
+
+For real intersections, the discriminant \(D = b^2 - 4ac\) must be non-negative. For each valid \(t\), the \(z\)-coordinate is given by:
+
+``
+z(t) = z + v_z\,t,
+``
+
+and must satisfy ``z_b \le z(t) \le z_a`` to lie within the finite cylinder.
+
+#### 4. Intersection with the End-Caps
+
+**Top End-Cap (at ``z = z_a``):**
+
+- Set the ``z`` equation equal to ``z_a``:
+
+``
+  z + v_z\,t = z_a \quad \Longrightarrow \quad t = \frac{z_a - z}{v_z}\quad (v_z \neq 0).
+``
+
+- The corresponding ``x`` and ``y`` coordinates are:
+
+  ``
+  x(t) = x + v_x\,t,\quad y(t) = y + v_y\,t.
+  ``
+
+- This intersection is valid if:
+
+  ``
+  (x(t)-x_0)^2 + (y(t)-y_0)^2 \le R^2.
+  ``
+
+
+**Bottom End-Cap (at ``z = z_b``):**
+- Similarly, set:
+
+  ``
+  z + v_z\,t = z_b \quad \Longrightarrow \quad t = \frac{z_b - z}{v_z}\quad (v_z \neq 0).
+  ``
+
+- The intersection is valid if:
+
+  ``
+  (x(t)-x_0)^2 + (y(t)-y_0)^2 \le R^2.
+  ``
+
+
+"""
 
 # ╔═╡ 569026e1-b82f-4230-b8f5-4fe60afd2cb7
 
@@ -1280,17 +1377,28 @@ end
 # ╠═1ef1b221-da82-4852-bfb3-ffe1b2b50600
 # ╠═198f564c-7588-459f-86b9-69e36606fa7e
 # ╠═b4bec083-392c-45f3-b440-91edd3b5e5fc
+# ╠═42392447-15b4-48ed-ad52-cf00aefc435f
+# ╠═604a8022-d687-4684-8fd2-0178a3192452
 # ╠═7ec27076-edd8-4d3f-b691-8cf877144f98
+# ╠═1dad2fcb-836e-46a8-bb2b-8d43f25c4767
 # ╠═d586338c-ad5a-42b4-aa12-ec2a59b583f8
 # ╠═23167ba6-4ddc-49b8-9aec-b9148d09befc
+# ╠═57dec276-2cd4-4f12-9595-8cb42cbf08d9
 # ╠═8c7035f0-82fd-4c86-ab63-5cdd3b4d7539
 # ╠═8f537416-301f-427f-a584-b91cbd83450d
+# ╠═02ffafb2-8ca6-4fcd-a267-c5e7528137cc
+# ╠═e97ec2de-accb-4336-bf0e-2247bbaeb3e2
 # ╠═0aa7a4ef-5136-4126-a486-c40eaad99557
 # ╠═23d039f4-b1db-4778-be0b-2fa01075a1a2
 # ╠═0e31a7b1-e95c-477a-9212-a5a1726370e5
-# ╠═42d12a7c-e067-4342-860e-ad3530913094
-# ╠═1323fe1d-2604-4002-bb58-e8a68cb685b7
 # ╠═b56be6ba-7e8a-48c2-a2d3-7b4e27e4f03c
+# ╠═f6e1dced-e962-4884-83aa-9f181a65982e
+# ╠═5f2f631e-f305-49c2-88f4-dbf9be2c97a5
+# ╠═ba7cb219-b68d-4414-9da0-e0c113db5c24
+# ╠═f400c977-03df-4ea3-b93a-c66bd386ab04
+# ╠═d6f88078-ee18-4ff0-a2a1-67e6005d0b39
+# ╠═94a48200-aca1-4167-9e45-581e53cfdad5
+# ╠═c2f6d14e-cfb7-4f53-88cc-9da2676f1ecb
 # ╠═3c238213-30c7-41a7-bd7b-50f8c09b7adf
 # ╠═9e8d1efe-0f54-4afc-a956-3664cf972d8a
 # ╠═9ebb47ac-b76c-4be4-8336-6da26f26c6c5
@@ -1312,4 +1420,5 @@ end
 # ╠═734dc505-9e93-4dd9-b939-6eba4317cb27
 # ╠═9d86737d-1009-4847-84ee-b5073408acde
 # ╠═a91f3f93-ffec-47fc-819e-e4f43bee7f95
+# ╠═42d12a7c-e067-4342-860e-ad3530913094
 # ╠═569026e1-b82f-4230-b8f5-4fe60afd2cb7

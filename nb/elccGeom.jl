@@ -5,7 +5,7 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 7884ab66-f9e2-11ef-03ea-f10faf671dba
-using Pkg; Pkg.activate("/Users/jjgomezcadenas/Projects/JNEXT")
+using Pkg; Pkg.activate(ENV["JNEXT"])
 
 
 # ╔═╡ 108bd997-6d2d-416d-b2df-ec034273d62e
@@ -21,6 +21,30 @@ begin
 	using JLD2
 end
 
+# ╔═╡ a333497c-c5fc-49a7-a8ca-d82a7dcd27ad
+begin
+	import GLMakie
+	using GeometryBasics
+end
+
+# ╔═╡ 57248e63-9e36-4644-a6c4-5a3aa1808e29
+function ingredients(path::String)
+    # this is from the Julia source code (evalfile in base/loading.jl)
+    # but with the modification that it returns the module instead of the last object
+    name = Symbol(basename(path))
+    m = Module(name)
+    Core.eval(m,
+        Expr(:toplevel,
+                :(eval(x) = $(Expr(:core, :eval))($name, x)),
+                :(include(x) = $(Expr(:top, :include))($name, x)),
+                :(include(mapexpr::Function, x) = $(Expr(:top, :include))(mapexpr, $name, x)),
+                :(include($path))))
+    m
+end
+
+# ╔═╡ eada2802-68a7-4663-a2c0-c1ca41b74601
+jn = ingredients(string(ENV["JNEXT"],"/src/JNEXT.jl"))
+
 # ╔═╡ 2617ae05-e1db-473a-9b0f-befeea6d0e12
 md"""
 # Simulation
@@ -30,6 +54,7 @@ md"""
 begin
 	kV = 1e+3
 	mm = 1.0
+	cm = 10.0
 end
 
 # ╔═╡ 3b1d7427-73ca-4dca-99f9-93b2cb6df9a8
@@ -62,6 +87,9 @@ begin
 	nsipmy(sipm::SiPMGeometry) = Int(floor(sipm.Y/sipm.pitch))
 end
 
+# ╔═╡ ebe9308e-87f5-410e-a17d-deb59b59a62d
+
+
 # ╔═╡ ac79ab2e-af61-499a-94e7-964a8f04b111
 begin
 
@@ -76,11 +104,25 @@ begin
 	Va = 1kV      # potential at anode 
 	d_hole = 3.0mm  # Hole diameter in each dice (mm)
 	pitch = 6mm     # pitch
+	trfile ="trj_d_3_p_6.jld2"
 	
+	md"""
+	- Size of ELCC $(X) x $(Y) mm
+	- Zc = $(Zc)
+	"""
 end
 
-# ╔═╡ d0bc3255-be2b-4fab-96ed-07c6c96bd0e2
-140 * 18 - 116 * 10
+# ╔═╡ 2c67d2f7-4d20-4ff6-ba81-c6902980478d
+function yield_mm_p_10b(zg, za, vg, va) 
+	vv = (vg-va)/kV
+	zz = (zg-za)/cm
+	eovp10b = -vv/zz
+	ycm = 140 * eovp10b - 116 * 10
+	ycm/cm
+end
+
+# ╔═╡ b2c37cf5-3a69-408c-9324-7ec1cdef6d18
+ymm = yield_mm_p_10b(Zg, Za, Vg, Va)
 
 # ╔═╡ 321fb432-4464-47b8-94ac-30d466670224
 md"""
@@ -94,10 +136,9 @@ elcc = ELCCGeometry(X, Y, Zc, Zg, Za, Zs, Vg, Va, d_hole, pitch)
 sipm = SiPMGeometry(6.0, 10.0, 120.0, 120.0)
 
 # ╔═╡ 16e4221a-4dd8-4571-8ce2-ef259400562a
-nsipmx(sipm)
-
-# ╔═╡ 0aaa3ebf-92f4-4169-bb94-3ba19a70d074
-ndicex(elcc)
+md"""
+- ELCC structure created with $(ndicex(elcc)) dices and $(nsipmx(sipm)) sipms.
+"""
 
 # ╔═╡ a340f566-c9c0-4293-988e-11b7e69e8e4a
 md"""
@@ -105,7 +146,7 @@ md"""
 """
 
 # ╔═╡ c26b4fc3-3d16-45fc-bffc-934ccfd9deb9
-@load "trajectories_data.jld2" ftrj btrj
+@load  trfile ftrj btrj
 
 # ╔═╡ 7c38062b-0671-451c-911e-f88272f97937
 begin
@@ -122,6 +163,51 @@ begin
 	"""
 end
 
+# ╔═╡ 8c7035f0-82fd-4c86-ab63-5cdd3b4d7539
+function plot_cylinder(gammas, x0, y0, zg, zb, za, r; num_plot=5)
+	
+	fx = GLMakie.Figure(size = (1600, 800))
+	ax = GLMakie.LScene(fx[1,1], show_axis = true)
+	
+
+# Draw the cylinder.
+# Define the cylinder with its top and bottom end-caps. Here we assume:
+# - The cylinder's top endcap is at Zg and bottom at Zb.
+# - The cylinder is centered at a point and oriented along the z-axis.
+# Adjust the parameters as needed.
+# In this example, we create a cylinder with:
+#   Center of bottom: (1.0, 1.0, 1.0), 
+#   Center of top:    (1.0, 1.0, 4.0), 
+#   Radius: 2.0
+	cyl=Cylinder(Point3(x0,y0,zb), Point3(x0,y0,zg), r)
+	cyl2=Cylinder(Point3(x0,y0,za), Point3(x0,y0,zg), r)
+	GLMakie.wireframe!(ax, cyl, color = (:black, 0.2), linewidth = 1, transparency = true)
+	GLMakie.wireframe!(ax, cyl2, color = (:blue, 0.2), linewidth = 1, transparency = true)
+
+	# Define a set of colors to cycle through for different gammas.
+	colors = [:red, :blue, :green, :orange, :purple, :cyan, :magenta, :yellow]
+
+	# Loop over the selected gammas.
+	for i in 1:min(num_plot, length(gammas))
+	    gamma = gammas[i]
+	    # Extract x, y, z coordinates for each step in the gamma.
+	    xs = [step[1] for step in gamma]
+	    ys = [step[2] for step in gamma]
+	    zs = [step[3] for step in gamma]
+	    
+	    # Choose a color for this gamma (cycling if needed).
+	    col = colors[mod1(i, length(colors))]
+	    
+	    # Plot each step as a scatter point.
+	    GLMakie.scatter!(ax, xs, ys, zs, markersize = 5, color = col)
+	    
+	    # Connect the steps with a dashed line.
+	    GLMakie.lines!(ax, xs, ys, zs, color = col, linestyle = :dash, linewidth = 1)
+end
+
+	fx
+end
+
 # ╔═╡ 0e31a7b1-e95c-477a-9212-a5a1726370e5
 # Example usage:
 # Assume that your extended trajectory from simulate_electron_transport3D is stored in `traj_ext`
@@ -130,27 +216,382 @@ end
 # p2 = plot_trajectory_xz(traj_ext, photon_impact)
 # display(p2)
 
-# ╔═╡ 63839355-db75-4fd5-b12e-ba348a23d3fc
-function propagate(tr, elcc)
-	k = 0
-	for i in range(1, size(tr)[1])
-		xyz = tr[i, :]
-		if xyz[3] > elcc.Zg
-			continue
-		end
-		k+=1
-		if k >5
-			break
-		else
-		println("i = $(i), k = $(k)  xyz = $(xyz)")
-		end
-	end
-end
+# ╔═╡ 42d12a7c-e067-4342-860e-ad3530913094
+md"""
+### Intersection of a Line with a Finite Cylinder
+
+#### 1. Equation of the Line
+The line is given in parametric form as:
+\[
+\begin{aligned}
+x(t) &= x + v_x\,t,\\[1mm]
+y(t) &= y + v_y\,t,\\[1mm]
+z(t) &= z + v_z\,t,
+\end{aligned}
+\]
+where \((x,y,z)\) is a point on the line and \((v_x,v_y,v_z)\) are the direction cosines.
+
+#### 2. Description of the Cylinder
+The cylinder is defined by:
+- **Lateral Surface:** All points satisfying
+  \[
+  (x - x_0)^2 + (y - y_0)^2 = R^2,
+  \]
+  where \((x_0, y_0)\) is the center of the cylinder’s circular cross-section in the \(xy\)-plane and \(R\) is the cylinder’s radius.
+- **End-Caps:** Two horizontal planes at:
+  \[
+  z = z_a \quad (\text{top cap}) \quad \text{and} \quad z = z_b \quad (\text{bottom cap}),
+  \]
+  with \(z_a > z_b\).
+
+#### 3. Intersection with the Lateral Surface
+Substitute the parametric equations of the line into the cylinder’s equation:
+\[
+\bigl(x + v_x\,t - x_0\bigr)^2 + \bigl(y + v_y\,t - y_0\bigr)^2 = R^2.
+\]
+Expanding, we obtain a quadratic in \(t\):
+\[
+(v_x^2 + v_y^2)t^2 + 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr]t + \Bigl[(x-x_0)^2+(y-y_0)^2 - R^2\Bigr] = 0.
+\]
+Let
+\[
+a = v_x^2 + v_y^2,\quad b = 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr],\quad c = (x-x_0)^2 + (y-y_0)^2 - R^2.
+\]
+Then the quadratic equation is:
+\[
+a\,t^2 + b\,t + c = 0.
+\]
+The solutions are:
+\[
+t = \frac{-b \pm \sqrt{b^2-4ac}}{2a}.
+\]
+For real intersections, the discriminant \(D = b^2 - 4ac\) must be non-negative. For each valid \(t\), the \(z\)-coordinate is given by:
+\[
+z(t) = z + v_z\,t,
+\]
+and must satisfy \(z_b \le z(t) \le z_a\) to lie within the finite cylinder.
+
+#### 4. Intersection with the End-Caps
+
+**Top End-Cap (at \(z = z_a\)):**
+- Set the \(z\) equation equal to \(z_a\):
+  \[
+  z + v_z\,t = z_a \quad \Longrightarrow \quad t = \frac{z_a - z}{v_z}\quad (v_z \neq 0).
+  \]
+- The corresponding \(x\) and \(y\) coordinates are:
+  \[
+  x(t) = x + v_x\,t,\quad y(t) = y + v_y\,t.
+  \]
+- This intersection is valid if:
+  \[
+  (x(t)-x_0)^2 + (y(t)-y_0)^2 \le R^2.
+  \]
+
+**Bottom End-Cap (at \(z = z_b\)):**
+- Similarly, set:
+  \[
+  z + v_z\,t = z_b \quad \Longrightarrow \quad t = \frac{z_b - z}{v_z}\quad (v_z \neq 0).
+  \]
+- The intersection is valid if:
+  \[
+  (x(t)-x_0)^2 + (y(t)-y_0)^2 \le R^2.
+  \]
+
+#### Summary
+- **Lateral Surface Intersection:**  
+  Solve:
+  \[
+  a\,t^2 + b\,t + c = 0,\quad \text{where } a = v_x^2+v_y^2,\quad b = 2\bigl[v_x(x-x_0)+v_y(y-y_0)\bigr],\quad c = (x-x_0)^2+(y-y_0)^2-R^2.
+  \]
+  Then ensure that \(z + v_z\,t\) lies between \(z_b\) and \(z_a\).
+
+- **Top End-Cap Intersection:**  
+  \[
+  t = \frac{z_a - z}{v_z},\quad \text{with } (x+v_x\,t-x_0)^2 + (y+v_y\,t-y_0)^2 \le R^2.
+  \]
+
+- **Bottom End-Cap Intersection:**  
+  \[
+  t = \frac{z_b - z}{v_z},\quad \text{with } (x+v_x\,t-x_0)^2 + (y+v_y\,t-y_0)^2 \le R^2.
+  \]
+
+These equations allow you to determine the parameter \(t\) at which a line (defined by a point \((x,y,z)\) and direction \((v_x,v_y,v_z)\)) intersects either the lateral surface or the end-caps of a finite cylinder.
+
+"""
+
+# ╔═╡ 1323fe1d-2604-4002-bb58-e8a68cb685b7
+md"""
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\begin{document}
+
+\section*{Intersection of a Line with a Finite Cylinder}
+
+\subsection*{1. The Line}
+The line is given in parametric form by:
+\[
+\begin{aligned}
+x(t) &= x + v_x\,t,\\[1mm]
+y(t) &= y + v_y\,t,\\[1mm]
+z(t) &= z + v_z\,t,
+\end{aligned}
+\]
+where \((x,y,z)\) is a point on the line and \((v_x,v_y,v_z)\) are its direction cosines.
+
+\subsection*{2. The Cylinder}
+The cylinder is defined by:
+\begin{itemize}
+  \item \textbf{Lateral Surface:} All points \((x,y,z)\) satisfying
+  \[
+  (x - x_0)^2 + (y - y_0)^2 = R^2,
+  \]
+  where \((x_0,y_0)\) is the center of the circular cross-section and \(R\) is the radius.
+  \item \textbf{End-Caps:} The top and bottom are given by the horizontal planes
+  \[
+  z = z_a \quad \text{(top cap)} \quad \text{and} \quad z = z_b \quad \text{(bottom cap)},
+  \]
+  with \(z_a > z_b\).
+\end{itemize}
+
+\subsection*{3. Intersection with the Lateral Surface}
+Substitute the line equations into the cylinder equation:
+\[
+\bigl(x + v_x t - x_0\bigr)^2 + \bigl(y + v_y t - y_0\bigr)^2 = R^2.
+\]
+Expanding, we obtain a quadratic in \(t\):
+\[
+(v_x^2 + v_y^2)t^2 + 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr]t + \Bigl[(x-x_0)^2+(y-y_0)^2 - R^2\Bigr] = 0.
+\]
+Define:
+\[
+\begin{aligned}
+a &= v_x^2 + v_y^2,\\[1mm]
+b &= 2\bigl[v_x(x-x_0) + v_y(y-y_0)\bigr],\\[1mm]
+c &= (x-x_0)^2+(y-y_0)^2 - R^2.
+\end{aligned}
+\]
+Thus, the quadratic becomes:
+\[
+a\,t^2 + b\,t + c = 0,
+\]
+with solutions:
+\[
+t = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}.
+\]
+The discriminant \(D = b^2 - 4ac\) must be non-negative for real intersections. For each valid \(t\), the \(z\)-coordinate is
+\[
+z(t) = z + v_z\,t,
+\]
+which must satisfy:
+\[
+z_b \le z + v_z\,t \le z_a.
+\]
+
+\subsection*{4. Intersection with the End-Caps}
+\paragraph*{Top End-Cap (at \(z=z_a\)):}
+Set:
+\[
+z + v_z\,t = z_a \quad \Longrightarrow \quad t = \frac{z_a - z}{v_z} \quad (v_z \neq 0).
+\]
+The corresponding \((x,y)\) coordinates are:
+\[
+x(t) = x + v_x\,t, \quad y(t) = y + v_y\,t.
+\]
+This intersection is valid if:
+\[
+(x(t)-x_0)^2+(y(t)-y_0)^2 \le R^2.
+\]
+
+\paragraph*{Bottom End-Ca
+
+"""
 
 # ╔═╡ b56be6ba-7e8a-48c2-a2d3-7b4e27e4f03c
 md"""
 # Functions
 """
+
+# ╔═╡ 3c238213-30c7-41a7-bd7b-50f8c09b7adf
+"""
+Get coordinates and yield
+"""
+function get_coord_and_yield(tr::AbstractMatrix, zg::Float64, ymm::Float64)
+		iz0 = 0
+		z0 = zg
+		YL = Vector{Int64}()
+		XC = Vector{Float64}()
+		YC = Vector{Float64}()
+		ZC = Vector{Float64}()
+		for i in range(1, size(tr)[1])
+			z = tr[i, 3]
+			if z >zg
+				continue
+			elseif iz0 == 0
+				iz0 = i
+				z0 = tr[i, 3]
+				#println(z0)
+			end
+			if z < z0
+				dz = z0 - z
+				yl = Int(floor(dz * ymm))
+				push!(YL, yl)
+				push!(XC, tr[i, 1])
+				push!(YC, tr[i, 2])
+				push!(ZC, tr[i, 3])
+				z0 = z
+			end
+		end
+		YL, XC, YC, ZC
+	end
+
+# ╔═╡ 9e8d1efe-0f54-4afc-a956-3664cf972d8a
+"""
+ Solve for time to reach the top (z = ztop).
+"""
+function solve_t_top(z, vz, ztop; eps=1e-10)
+	println("solve_t_top: z = $(z), vz=$(vz), ztop=$(ztop)")
+    if vz > eps
+        dt = (ztop - z) / vz
+		println("solve_t_top: dt = $(dt)")
+        if dt > eps
+            return dt
+        end
+    end
+    return nothing
+end
+
+
+
+# ╔═╡ 9ebb47ac-b76c-4be4-8336-6da26f26c6c5
+
+"""
+ Solve for time to reach the bottom (z = zb).
+"""
+function solve_t_bottom(z, vz, zb; eps=1e-10)
+	println("solve_t_bottom: z = $(z), vz=$(vz), zb=$(zb)")
+    if vz < -eps
+        dtb = (abs(zb) -abs(z)) / abs(vz)
+		println("solve_t_bottom: dt = $(dtb)")
+        if dtb > eps
+            return dtb
+        end
+    end
+    return nothing
+end
+
+# ╔═╡ 5b913924-1f00-4fc7-9c6a-0ede1d400f5c
+"""
+	Solve the intersection with the cylinder wall 
+	
+"""
+function solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=1e-10)
+	a = vx^2 + vy^2
+	b = 2 * (x * vx + y * vy)
+	c = (x - x0)^2 + (y - y0)^2 - R^2
+
+	println("solve_t_barrel: x-x0 = $(x-x0), y-y0=$(y-y0), vx = $(vx), vy=$(vy),R = $(R)")
+	println("a = $(a), b = $(b), c = $(c)")
+	if abs(a) < eps
+		return nothing
+	end
+
+	disc = b^2 - 4 * a * c
+	println("disc = $(disc)")
+	if disc < 0
+		return nothing
+	end
+
+	sqrt_disc = sqrt(disc)
+	t1 = (-b + sqrt_disc) / (2 * a)
+	t2 = (-b - sqrt_disc) / (2 * a)
+
+	println("t1 = $(t1), t2 = $(t2)")
+
+	ts_candidates = Float64[]
+	if t1 > eps
+		push!(ts_candidates, t1)
+	end
+	if t2 > eps
+		push!(ts_candidates, t2)
+	end
+
+	if !isempty(ts_candidates)
+		return minimum(ts_candidates)
+	else
+		return nothing
+	end
+end
+
+
+
+# ╔═╡ b501a1f1-2c96-4680-b08a-982d2877603d
+"""
+Generate random direction
+"""
+function generate_direction()
+    cost = 2.0 * rand() - 1.0  # cosine(theta) uniformly in [-1, 1]
+    theta = acos(cost)         # theta in [0, π]
+    phi = 2.0 * pi * rand()      # phi in [0, 2π]
+    sinth = sqrt(1 - cost^2)
+    vx = sinth * cos(phi)
+    vy = sinth * sin(phi)
+    vz = cost
+    return (vx, vy, vz)
+end
+
+
+# ╔═╡ c7704f94-2ab5-4111-ac7c-63f978c7ee4c
+function float_to_str(number, fmt::String)
+    io = IOBuffer()
+    Printf.format(io, Printf.Format(fmt), number)
+    return String(take!(io))
+end
+
+# ╔═╡ fcbf9e5a-b7f2-400d-87af-7448fd348071
+function vect_to_str(vec::AbstractVector, fmt::String)
+    # Helper function to format a single element
+    function format_element(x, fmt)
+        if x isa AbstractFloat
+            float_to_str(x, fmt)
+        else
+            return string(x)
+        end
+    end
+	formatted_elements = [format_element(x, fmt) for x in vec]
+	return "[" * join(formatted_elements, ", ") * "]"
+end
+
+# ╔═╡ c1fec8e5-bf38-4d39-8224-bf0051fc08eb
+function generate_electron_positions_random(N::Int, 
+                                            x_min::Float64, x_max::Float64, 
+                                            y_min::Float64, y_max::Float64)
+    # Generate N random x positions uniformly distributed between x_min and x_max
+    xs = x_min .+ (x_max - x_min) .* rand(N)
+    
+    # Generate N random y positions uniformly distributed between y_min and y_max
+    ys = y_min .+ (y_max - y_min) .* rand(N)
+    
+    # Combine the x and y positions into an N×2 matrix
+    electron_xy0 = hcat(xs, ys)
+    
+    return electron_xy0
+end
+
+# Example usage:
+# positions = generate_electron_positions_random(100, 0.0, 10.0, 0.0, 5.0)
+# This returns a 100×2 matrix where each row is a random (x, y) coordinate.
+
+
+# ╔═╡ 2273c136-4709-43a6-bf68-1184493fbb70
+begin
+	electron_xy0 = generate_electron_positions_random(20, 0.0, elcc.X, 0.0, elcc.Y)
+	i = 1 # electron number to run 
+	electron_pos = electron_xy0[i, :]  
+	md"""
+	Generated electron at position $(vect_to_str(electron_pos, "%.2f"))
+	"""
+end
 
 # ╔═╡ af2b2805-9e6c-4078-9427-02f787212f19
 function generate_electron_positions(N::Int, 
@@ -175,16 +616,6 @@ function generate_electron_positions(N::Int,
     electron_xy0 = reduce(vcat, [reshape([p[1], p[2]], 1, 2) for p in pos])
     
     return electron_xy0
-end
-
-# ╔═╡ 15552c1d-9bcf-40bc-b14a-c1bb55f63673
-electron_xy0 = generate_electron_positions(2000, 0.0, elcc.X, 0.0, elcc.Y)
-
-# ╔═╡ 2273c136-4709-43a6-bf68-1184493fbb70
-begin
-	i = 120 # electron number to run 
-	electron_pos = electron_xy0[i, :]  # an example electron arriving at (x,y) in mm.
-	#result = run_simulation(elcc, sipm, electron_absolute)
 end
 
 # ╔═╡ d1aec6ee-f530-4a15-9bf9-3081c7f55f4a
@@ -224,17 +655,14 @@ end
 begin 
 	dice_indices, dice_origin, xlocal = find_dice(electron_pos, elcc)
 	sipm_indices, sipm_origin =find_sipm(electron_pos, sipm)
-end
-
-# ╔═╡ 34ad3d6b-8452-4426-96d6-f004c48b4bae
-begin
 	xl = collect(xlocal)
 	izfr = argmin([norm(xl -zftrj[i]) for i in 1:length(zftrj)])
-	println("Electron at $(electron_pos) assigned to dice $(dice_indices) with dice origin $(dice_origin) and local coords $(xlocal)")
-	println("sipm indices = $(sipm_indices) with origin $(sipm_origin)")
-	println("Closer trajectory number $(izfr), with coordinates $(ftrj[izfr][1,:])")
-
-	end
+	md"""
+	- dice indices = $(dice_indices), sipm indices = $(sipm_indices)
+	- local coordinates = $(vect_to_str(xl, "%.2f"))
+	- Closer trajectory number $(izfr), with coordinates $(vect_to_str(ftrj[izfr][1,:], "%.2f"))
+	"""
+end
 
 # ╔═╡ 951ea570-d232-47a3-bbe8-b216de1469a8
 begin 
@@ -246,11 +674,191 @@ begin
 	"""
 end
 
-# ╔═╡ 1bc5d640-7a09-49a6-a1a7-c1ea0c8d1664
-size(tr)[1]
+# ╔═╡ d474342a-81ca-4504-86a9-52925211b685
+tr
 
-# ╔═╡ edde87b6-47d2-4fee-9ec3-62d4d2701c6d
-propagate(tr, elcc)
+# ╔═╡ 1ef1b221-da82-4852-bfb3-ffe1b2b50600
+typeof(tr)
+
+# ╔═╡ 5bee9446-a537-4012-95d2-77c91f27c83a
+"""
+Given an electron absolute (x,y) position on the ELCC surface,
+find the sipm to which it is assigned 
+"""
+function find_abspos(xr::Tuple{Float64, Float64}, sipmIJ::Tuple{Int64, Int64}, sipm::SiPMGeometry)
+    # Compute dice indices (starting at 1)
+    i = sipmIJ[1]
+    j = sipmIJ[2]
+    # SiPM lower left corner (absolute coordinates)
+    dice_origin = ( (i-1)*sipm.pitch, (j-1)*sipm.pitch )
+   	xabs = xr[1] + dice_origin[1]
+    yabs = xr[2] + dice_origin[2]
+	return  xabs, yabs
+end
+
+# ╔═╡ 7ec27076-edd8-4d3f-b691-8cf877144f98
+"""
+Simulate photons along the trajectory.
+
+At each step along the trajectory, generate a number of photons.
+Propagate them along.
+Count photons that hit a SiPM (if the impact falls within a sensor active area).
+"""
+function simulate_photons_along_trajectory(electron_pos::Vector{Float64},                                                       trj::AbstractMatrix, 
+	                                       elcc::ELCCGeometry,
+	                                       sipm::SiPMGeometry; 
+										   ymm=10, p1=0.95, p2=0.5, eps=1e-10)
+	
+	sipm_indices, sipm_origin =find_sipm(electron_pos, sipm)
+	dice_indices, dice_origin, xlocal = find_dice(electron_pos, elcc)
+	xl = collect(xlocal)
+	
+	dd = elcc.d_hole
+	R = dd/2
+	pp = (elcc.pitch - dd)/2
+	x0 = y0 = pp + R
+	ztop = elcc.Zg
+	zbot = elcc.Za
+	println("--simulate_photons_along_trajectory--")
+	println("r hole = $(R) position of hole x0=$(x0) y0=$(y0)")
+	println("->absolute electron position $(electron_pos)")
+	println("->electron position relative to dice $(xl)")
+	println("->dice indices $(dice_indices), origin =$(dice_origin)")
+	println("->sipm indices $(sipm_indices), origin =$(sipm_origin)")
+	
+	YL, XC, YC, ZC = get_coord_and_yield(trj, ztop, ymm)
+
+	gammas = Vector{Vector{Vector{Float64}}}()
+	# photon loop
+	#for ri in range(1, stop=length(YL), length=3)
+	for ri in range(1, 2)
+	#for i in range(1, length(YL))  # steps
+		i =Int(ri)
+		xe = XC[i]
+		ye = YC[i]
+		ze = ZC[i]
+		yy = YL[i]
+		count_top = 0
+		count_bot = 0
+		println("-->for step =$(i), xe = $(xe), y=$(ye), z=$(ze), yield=$(yy)")
+
+		
+		for ng in range(1, yy) # number of photons per step
+			vx, vy, vz= generate_direction() # generate random direction
+			println("--->for ng =$(ng), vx =$(vx), vy =$(vy), vz = $(vz)")
+
+			n_collisions = 0
+			
+        	alive = true
+			steps = Vector{Vector{Float64}}()
+			push!(steps, [xe, ye, ze])
+			x = xe
+			y = ye
+			z = ze
+
+	        while alive
+	            t_barrel = solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=eps)
+	            t_top    = solve_t_top(z, vz, ztop; eps=eps)
+	            t_bottom = solve_t_bottom(z, vz, zbot; eps=eps)
+				
+				println("--->t_barrel =$(t_barrel), t_top =$(t_top), t_bottom =$(t_bottom)")
+	
+	            # Gather valid intersection times and corresponding surface labels.
+	            possible_times = Float64[]
+	            labels = String[]
+	
+	            if t_barrel !== nothing
+	                push!(possible_times, t_barrel)
+	                push!(labels, "barrel")
+	            end
+	            if t_top !== nothing
+	                push!(possible_times, t_top)
+	                push!(labels, "top")
+	            end
+	            if t_bottom !== nothing
+	                push!(possible_times, t_bottom)
+	                push!(labels, "bottom")
+	            end
+	
+	            # If no intersection is found, the photon is lost.
+	            if isempty(possible_times)
+	                alive = false
+	                break
+	            end
+	
+	            # Choose the intersection that happens first.
+	            idx_min = argmin(possible_times)
+	            t_min = possible_times[idx_min]
+	            surf = labels[idx_min]
+
+				println("--->t_min =$(t_min), surf =$(surf)")
+	
+	            # Move the photon.
+	            x_new = x + t_min * vx
+	            y_new = y + t_min * vy
+	            z_new = z + t_min * vz
+
+				println("--->x_new =$(x_new), y_new =$(y_new), z_new =$(z_new)")
+				push!(steps, [x_new, y_new, z_new])
+	
+	            if surf == "bottom" # anode 
+	                
+	                count_bot += 1
+	                alive = false
+					println("--->photon hits sipm at x =$(x_new), y = $(y_new), count =$(count_bot)")
+					push!(gammas, steps)
+
+					# find absolute position
+					xabs, yabs = find_abspos((x_new, y_new), sipm_indices, sipm)
+					println("--->xabs =$(xabs), yabs = $(yabs)")
+					
+					sipmij, _ = find_sipm(collect((xabs, yabs)), sipm)
+					println("--->sipm(i,j) =($(sipmij[1]), $(sipmij[2]))")
+					
+	            elseif surf == "top"
+	                # Photon is lost when reaching the top (gate).
+	                alive = false
+					count_top += 1
+					println("--->photon goes backward, count =$(count_top)")
+					push!(gammas, steps)
+	
+	            else  # "barrel"
+	                n_collisions += 1
+					println("--->photon hits the barrel, n_collisions =$(n_collisions)")
+	                # Determine re-emission probability.
+	                p = (n_collisions == 1) ? p1 : p2
+	                if rand() < p
+	                    # Photon is re-emitted 
+	                    x, y, z = x_new, y_new, z_new
+	                    vx, vy, vz = generate_direction()
+
+						println("---->photon reemited in barrel")
+						println("x = $(x), y=$(y), z=$(z)")
+						println("vx = $(x), vy=$(y), vz=$(z)")
+	                else
+	                    # Photon is lost if not re-emitted.
+						println("---->photon absorbed in barrel")
+	                    alive = false
+						push!(gammas, steps)
+	                end
+            	end
+			end
+		end
+	end
+	gammas
+end
+
+# ╔═╡ b4bec083-392c-45f3-b440-91edd3b5e5fc
+gammas = simulate_photons_along_trajectory(electron_pos, tr, elcc, sipm; ymm=ymm/2)
+
+# ╔═╡ 198f564c-7588-459f-86b9-69e36606fa7e
+typeof(gammas)
+
+# ╔═╡ 23167ba6-4ddc-49b8-9aec-b9148d09befc
+gammas
+
+# ╔═╡ 8f537416-301f-427f-a584-b91cbd83450d
+ plot_cylinder(gammas, 3.0, 3.0, 0.0, -5.0, -10.0, 1.5; num_plot=1 )
 
 # ╔═╡ 82882beb-98b0-4a53-9f0d-9d16bcbc6c09
 """
@@ -478,7 +1086,10 @@ end
 # ╔═╡ 2144e49f-1505-4c19-a047-7733c7cfc0c1
 p_trajectory(electron_pos, elcc, sipm, tr) 
 
-# ╔═╡ 36c8c1d9-689b-446e-a8d0-83c7b5115944
+# ╔═╡ 734dc505-9e93-4dd9-b939-6eba4317cb27
+
+
+# ╔═╡ 9d86737d-1009-4847-84ee-b5073408acde
 """
 
 Plots the electron trajectory in the (x,z) plane and overlays the photon impact 
@@ -486,7 +1097,7 @@ point (shown in blue) on the SiPM plane.
 - `traj` is a matrix whose columns are [x y z] coordinates, and we plot the x and z.
 - `photon_impact` is a tuple (x, z) on the SiPM plane.
 """
-function plot_trajectory(traj::AbstractMatrix, 
+function plt_trajectory(traj::AbstractMatrix, 
 	                     xyl ::ELCCGeometry, sipm::SiPMGeometry)
 	
 	function plott(i, title)
@@ -540,77 +1151,72 @@ function plot_trajectory(traj::AbstractMatrix,
 	p1 = plott(1, "Trajectory (x,z)")
 	p2 = plott(2, "Trajectory (y,z)")
 	
+    p1,p2
+end
+
+# ╔═╡ d586338c-ad5a-42b4-aa12-ec2a59b583f8
+"""
+
+Plots the electron trajectory in the (x,z) plane and overlays the photon impact 
+point (shown in blue) on the SiPM plane.
+- `traj` is a matrix whose columns are [x y z] coordinates, and we plot the x and z.
+- `photon_impact` is a tuple (x, z) on the SiPM plane.
+"""
+function plot_gammas(gammas::Vector{Vector{Vector{Float64}}}, 
+	                 traj::AbstractMatrix, 
+	                 xyl::ELCCGeometry, sipm::SiPMGeometry;
+                     num_to_plot::Int=1)
+	
+	p1,p2 = plt_trajectory(traj, xyl, sipm)
+
+	
+	# Create a 3D plot with axis labels and a title.
+	#plt = plot(title="Gamma Trajectories", xlabel="x", ylabel="y", zlabel="z", legend=:outertopright)
+
+	# Use a built-in palette for distinct colors.
+	colors = palette(:tab10)
+
+	for i in 1:num_to_plot
+    	gamma = gammas[i]
+   	 # Extract x, y, z coordinates from each step in the gamma.
+    	xs = [step[1] for step in gamma]
+    	ys = [step[2] for step in gamma]
+    	zs = [step[3] for step in gamma]
+    
+    	# Select color for this gamma.
+    	col = colors[(i - 1) % length(colors) + 1]
+    
+    	# Plot points for each step.
+    	p1 = scatter!(p1, xs, ys, zs, label=false, marker=:circle, markersize=2, 
+			     color=col)
+    	# Connect the points with a dashed line.
+    	p1 =plot!(p1, xs, ys, zs, label="", linestyle=:dash, linewidth=2, color=col)
+	end
+
+    plot(p1,p2)
+end
+
+# ╔═╡ 0aa7a4ef-5136-4126-a486-c40eaad99557
+plot_gammas(gammas,tr,  elcc, sipm; num_to_plot=5)
+
+# ╔═╡ 36c8c1d9-689b-446e-a8d0-83c7b5115944
+"""
+
+Plots the electron trajectory in the (x,z) plane and overlays the photon impact 
+point (shown in blue) on the SiPM plane.
+- `traj` is a matrix whose columns are [x y z] coordinates, and we plot the x and z.
+- `photon_impact` is a tuple (x, z) on the SiPM plane.
+"""
+function plot_trajectory(traj::AbstractMatrix, 
+	                     xyl ::ELCCGeometry, sipm::SiPMGeometry)
+	
+	p1,p2 = plt_trajectory(traj, xyl, sipm)
+	
     plot(p1,p2)
 end
 
 # ╔═╡ 23d039f4-b1db-4778-be0b-2fa01075a1a2
 plot_trajectory(tr, elcc, sipm)
-
-# ╔═╡ f1be2273-d0a9-47f1-a92c-d151d9f9bd5f
-"""
-Once we know the electron's local coordinates in a dice, 
-return a pre-generated trajectory that will take the electron through the hole.
-For simplicity, assume a straight-line trajectory along z through the dice center.
-The trajectory goes from the ELCC surface (say, z = ELCC top = elcc.Z) to the SiPM plane.
-"""
-function get_trajectory_in_hole(dice_origin, elcc::ELCCGeometry)
-    diceWidth = elcc.X / elcc.nDiceX
-    diceHeight = elcc.Y / elcc.nDiceY
-    # Hole is assumed to be centered in the dice.
-    hole_center_local = (diceWidth/2, diceHeight/2)
-    # Define a trajectory as a set of points.
-    # For simplicity, assume 5 steps from ELCC top to the SiPM plane.
-    z_start = elcc.Z   # top of ELCC
-    z_end = elcc.Zsipm  # SiPM plane (assume it's at z = Zsipm, below the ELCC)
-    n_steps = 5
-    traj = zeros(Float64, n_steps, 3)
-    for k in 1:n_steps
-        t = (k-1)/(n_steps-1)
-        # The x and y coordinates follow a straight line from the electron's initial local position
-        # to the center of the hole. For simplicity we assume all electrons inside the hole are directed to the center.
-        x_local = hole_center_local[1]
-        y_local = hole_center_local[2]
-        z_val = (1-t)*z_start + t*z_end
-        # Convert local dice coordinate to absolute coordinate.
-        traj[k, :] = [dice_origin[1] + x_local, dice_origin[2] + y_local, z_val]
-    end
-    return traj
-end
-
-# ╔═╡ 9d86737d-1009-4847-84ee-b5073408acde
-"""
-Simulate photons along the trajectory.
-
-At each step along the trajectory, generate a constant number of photons.
-Propagate them along the same straight line (they follow the electron path).
-Count photons that hit a SiPM (if the impact falls within a sensor active area).
-"""
-function simulate_photons_along_trajectory(traj::AbstractMatrix, sipm::SiPMGeometry; N_photons_per_step=10)
-    # Assume photons are generated at each step along the trajectory.
-    # For simplicity, we assume that all photons follow the electron path.
-    # The final impact position on the SiPM plane is the last point of the trajectory.
-    impact = traj[end, :]
-    # Determine which SiPM (if any) is hit.
-    # We assume the SiPM plane is aligned with the ELCC, covering the same area (0 to sipm.X, 0 to sipm.Y).
-    # Sensors are squares of side sipm.sipmSize centered in cells of size sipm.pitch.
-    # Compute sensor indices from the impact (x,y) coordinates.
-    x = impact[1]
-    y = impact[2]
-    # Map x and y into sensor cell indices:
-    i_sensor = floor(Int, x / sipm.pitch) + 1
-    j_sensor = floor(Int, y / sipm.pitch) + 1
-    # Compute sensor cell center:
-    cx = (i_sensor - 1)*sipm.pitch + sipm.pitch/2
-    cy = (j_sensor - 1)*sipm.pitch + sipm.pitch/2
-    # Check if the impact lies within the active area (sensor size):
-    if abs(x - cx) <= sipm.sipmSize/2 && abs(y - cy) <= sipm.sipmSize/2
-        # All photons hit this sensor.
-        return (i_sensor, j_sensor, N_photons_per_step * size(traj, 1))
-    else
-        # Impact falls between sensors.
-        return nothing
-    end
-end
 
 # ╔═╡ a91f3f93-ffec-47fc-819e-e4f43bee7f95
 """
@@ -645,45 +1251,65 @@ end
 # ╔═╡ Cell order:
 # ╠═7884ab66-f9e2-11ef-03ea-f10faf671dba
 # ╠═108bd997-6d2d-416d-b2df-ec034273d62e
+# ╠═a333497c-c5fc-49a7-a8ca-d82a7dcd27ad
+# ╠═57248e63-9e36-4644-a6c4-5a3aa1808e29
+# ╠═eada2802-68a7-4663-a2c0-c1ca41b74601
 # ╠═2617ae05-e1db-473a-9b0f-befeea6d0e12
 # ╠═a891cff0-6910-4f78-8fc5-ff4e90163a7e
 # ╠═3b1d7427-73ca-4dca-99f9-93b2cb6df9a8
 # ╠═6097b338-4107-4d8e-9ee3-3f806f73c45b
 # ╠═af54e98e-15fb-4ad0-a990-66e183265867
+# ╠═ebe9308e-87f5-410e-a17d-deb59b59a62d
 # ╠═ac79ab2e-af61-499a-94e7-964a8f04b111
-# ╠═d0bc3255-be2b-4fab-96ed-07c6c96bd0e2
+# ╠═2c67d2f7-4d20-4ff6-ba81-c6902980478d
+# ╠═b2c37cf5-3a69-408c-9324-7ec1cdef6d18
 # ╠═321fb432-4464-47b8-94ac-30d466670224
 # ╠═154133b1-81bd-4bfe-86dc-cb3ccfec48f0
 # ╠═a0dfd610-50ca-4a75-9ab8-8c3937f31c33
 # ╠═dfd7cbf8-adaa-454f-957e-ecc6eee905d3
 # ╠═16e4221a-4dd8-4571-8ce2-ef259400562a
-# ╠═0aaa3ebf-92f4-4169-bb94-3ba19a70d074
 # ╠═a340f566-c9c0-4293-988e-11b7e69e8e4a
 # ╠═c26b4fc3-3d16-45fc-bffc-934ccfd9deb9
 # ╠═7c38062b-0671-451c-911e-f88272f97937
-# ╠═15552c1d-9bcf-40bc-b14a-c1bb55f63673
 # ╠═2273c136-4709-43a6-bf68-1184493fbb70
 # ╠═9eb86c8c-4347-46c4-9111-793f921fac56
 # ╠═ce9fe145-efa7-4421-9c90-1d9ee73c3e1e
-# ╠═34ad3d6b-8452-4426-96d6-f004c48b4bae
 # ╠═951ea570-d232-47a3-bbe8-b216de1469a8
 # ╠═2144e49f-1505-4c19-a047-7733c7cfc0c1
+# ╠═d474342a-81ca-4504-86a9-52925211b685
+# ╠═1ef1b221-da82-4852-bfb3-ffe1b2b50600
+# ╠═198f564c-7588-459f-86b9-69e36606fa7e
+# ╠═b4bec083-392c-45f3-b440-91edd3b5e5fc
+# ╠═7ec27076-edd8-4d3f-b691-8cf877144f98
+# ╠═d586338c-ad5a-42b4-aa12-ec2a59b583f8
+# ╠═23167ba6-4ddc-49b8-9aec-b9148d09befc
+# ╠═8c7035f0-82fd-4c86-ab63-5cdd3b4d7539
+# ╠═8f537416-301f-427f-a584-b91cbd83450d
+# ╠═0aa7a4ef-5136-4126-a486-c40eaad99557
 # ╠═23d039f4-b1db-4778-be0b-2fa01075a1a2
 # ╠═0e31a7b1-e95c-477a-9212-a5a1726370e5
-# ╠═1bc5d640-7a09-49a6-a1a7-c1ea0c8d1664
-# ╠═63839355-db75-4fd5-b12e-ba348a23d3fc
-# ╠═edde87b6-47d2-4fee-9ec3-62d4d2701c6d
+# ╠═42d12a7c-e067-4342-860e-ad3530913094
+# ╠═1323fe1d-2604-4002-bb58-e8a68cb685b7
 # ╠═b56be6ba-7e8a-48c2-a2d3-7b4e27e4f03c
+# ╠═3c238213-30c7-41a7-bd7b-50f8c09b7adf
+# ╠═9e8d1efe-0f54-4afc-a956-3664cf972d8a
+# ╠═9ebb47ac-b76c-4be4-8336-6da26f26c6c5
+# ╠═5b913924-1f00-4fc7-9c6a-0ede1d400f5c
+# ╠═b501a1f1-2c96-4680-b08a-982d2877603d
+# ╠═c7704f94-2ab5-4111-ac7c-63f978c7ee4c
+# ╠═fcbf9e5a-b7f2-400d-87af-7448fd348071
+# ╠═c1fec8e5-bf38-4d39-8224-bf0051fc08eb
 # ╠═af2b2805-9e6c-4078-9427-02f787212f19
 # ╠═d1aec6ee-f530-4a15-9bf9-3081c7f55f4a
 # ╠═232fab2c-fd22-449c-be78-f4e55c7021e8
+# ╠═5bee9446-a537-4012-95d2-77c91f27c83a
 # ╠═82882beb-98b0-4a53-9f0d-9d16bcbc6c09
 # ╠═79a51e0b-60ec-4ce7-b15b-1f4d88c6aa28
 # ╠═2b780346-122b-463f-ac4b-498e45dfa84f
 # ╠═60269ab6-d610-409e-90de-48022143ef1e
 # ╠═90d67f13-a612-42ec-9a21-fd40d822c17c
 # ╠═36c8c1d9-689b-446e-a8d0-83c7b5115944
-# ╠═f1be2273-d0a9-47f1-a92c-d151d9f9bd5f
+# ╠═734dc505-9e93-4dd9-b939-6eba4317cb27
 # ╠═9d86737d-1009-4847-84ee-b5073408acde
 # ╠═a91f3f93-ffec-47fc-819e-e4f43bee7f95
 # ╠═569026e1-b82f-4230-b8f5-4fe60afd2cb7

@@ -17,7 +17,7 @@ macro bind(def, element)
 end
 
 # ╔═╡ 74d371f0-f6b8-11ef-09b9-0b4b37b3c7fc
-using Pkg; Pkg.activate("/Users/jjgomezcadenas/Projects/JNEXT")
+using Pkg; Pkg.activate(ENV["JNEXT"])
 
 
 # ╔═╡ 4d79a667-8ed7-4562-adc2-ccf59071efa2
@@ -51,8 +51,7 @@ end
 
 # ╔═╡ b47f446c-db95-4c45-a399-2c1b5f751bca
 begin
-	cd("/Users/jjgomezcadenas/Projects/JNEXT/nb")
-	jn = ingredients("../src/JNEXT.jl")
+	jn = ingredients(string(ENV["JNEXT"],"/src/JNEXT.jl"))
 end
 
 # ╔═╡ d08bb2f0-3714-48ec-93ec-58863ce119b8
@@ -94,6 +93,7 @@ begin
 
 	file = string("phi3d_d", string(Int(d1)), "_p_", string(Int(p)),".jld2")
 	
+	tfile = string("trj_d_", string(Int(d1)), "_p_", string(Int(p)),".jld2")
 	md"""
 	Gala3D structure: 
 	- Ground plane located at $(z0) mm, V0 = 0 V
@@ -178,7 +178,7 @@ end
 
 # ╔═╡ 76c008ef-632b-4f58-be36-ac8d8f29f788
 begin
-	n_electrons = 300
+	n_electrons = 3000
 	electron_xy0 =generate_electron_positions(n_electrons, xd, yd)
 	#electron_x0 = collect(LinRange(x_min, x_max, n_electrons))
 	#electron_z0 = params.l3
@@ -196,7 +196,7 @@ ftrj
 btrj
 
 # ╔═╡ 1b19e24d-5d81-4125-a3bf-6441654f05b8
-@save "trajectories_data.jld2" ftrj btrj
+@save tfile ftrj btrj
 
 # ╔═╡ 886229eb-2bdc-4396-9360-a2dedcf12d0a
 function meshgrid(x::AbstractVector, y::AbstractVector)

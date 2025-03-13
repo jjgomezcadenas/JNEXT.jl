@@ -4,6 +4,18 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    #! format: off
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+    #! format: on
+end
+
 # ╔═╡ 7884ab66-f9e2-11ef-03ea-f10faf671dba
 using Pkg; Pkg.activate(ENV["JNEXT"])
 
@@ -43,6 +55,41 @@ end
 
 # ╔═╡ eada2802-68a7-4663-a2c0-c1ca41b74601
 jn = ingredients(string(ENV["JNEXT"],"/src/JNEXT.jl"))
+
+# ╔═╡ 279bd076-8960-4f17-b719-f3d985ffdd5c
+md"""
+## Logger
+"""
+
+# ╔═╡ 1046cd03-a4b0-411f-8107-a2d3df10a386
+begin
+	const DEBUG = 10
+	const INFO  = 20
+	const WARN  = 30
+	const ERROR = 40
+	global_log_level = INFO
+end
+
+# ╔═╡ aa3b92ad-7fbf-4b3e-9eae-b1e9dcaf2eb4
+begin
+		"Internal function to print message if the given level is >= global level."
+	function log_message(level::Int, level_str::String, msg)
+	    if level >= global_log_level
+	        # Print with a timestamp if desired.
+	        println("[$(level_str)] ", msg)
+	    end
+	end
+
+	"Log a debug message."
+	debug(msg) = log_message(DEBUG, "DEBUG", msg)
+	"Log an info message."
+	info(msg)  = log_message(INFO,  "INFO", msg)
+	"Log a warning message."
+	warn(msg)  = log_message(WARN,  "WARN", msg)
+	"Log an error message."
+	error(msg) = log_message(ERROR, "ERROR", msg)
+
+end
 
 # ╔═╡ 2617ae05-e1db-473a-9b0f-befeea6d0e12
 md"""
@@ -104,10 +151,19 @@ begin
 	d_hole = 3.0mm  # Hole diameter in each dice (mm)
 	pitch = 6mm     # pitch
 	trfile ="trj_d_3_p_6.jld2"
+
+	R = d_hole/2
+	dd = d_hole
+	pp = (pitch - d_hole)/2
+	x0 = y0 = pp + R
+	
 	
 	md"""
 	- Size of ELCC $(X) x $(Y) mm
-	- Zc = $(Zc)
+	- hole center in ($(x0), $(y0)) mm
+	- hole diameter $(dd) mm, pitch $(pitch) mm
+	- Zc = $(Zc), Zg = $(Zg), Za = $(Za), Zs = $(Zs)
+	-
 	"""
 end
 
@@ -162,14 +218,26 @@ begin
 	"""
 end
 
+# ╔═╡ c5924aa7-a04b-4820-aafb-2c71a5bb289d
+@bind SimulatePhotons CheckBox()
+
+# ╔═╡ b4bec083-392c-45f3-b440-91edd3b5e5fc
+#ntop, nbot, sij, gammas = simulate_photons_along_trajectory(electron_pos, tr, elcc, sipm; p1=1.00, p2=0.7, ymm=ymm, samplet=2, keepg=true)
+
 # ╔═╡ 42392447-15b4-48ed-ad52-cf00aefc435f
-sqrt((3-3.405)^2 +(3-1.555)^2)
+sqrt((3-2.09)^2 +(3-2.9)^2)
 
 # ╔═╡ 604a8022-d687-4684-8fd2-0178a3192452
 sqrt(0.5^2 +0.6^2 + 0.62^2)
 
 # ╔═╡ 1dad2fcb-836e-46a8-bb2b-8d43f25c4767
 
+
+# ╔═╡ 02ffafb2-8ca6-4fcd-a267-c5e7528137cc
+PyPlot.close("all")
+
+# ╔═╡ e8f9953e-4983-4825-abfa-829653aa0d26
+open_figs = PyPlot.get_fignums()
 
 # ╔═╡ 23d039f4-b1db-4778-be0b-2fa01075a1a2
 #plot_trajectory(tr, elcc, sipm)
@@ -215,6 +283,10 @@ begin
 	    return cyl
 	end
 end
+
+# ╔═╡ 657f8596-decb-41fc-bb83-f23839d8de32
+c = Cylinder(R, x0, y0, Za, Zg)
+	
 
 # ╔═╡ ba7cb219-b68d-4414-9da0-e0c113db5c24
 begin
@@ -276,7 +348,7 @@ function surfaces(c::Cylinder)
 end
 
 # ╔═╡ 57dec276-2cd4-4f12-9595-8cb42cbf08d9
-function draw_cylinder2(c; alpha=0.2, figsize=(16,16), 
+function draw_cylinder(c; alpha=0.2, figsize=(16,16), 
                         DWORLD=false, 
                         WDIM=((0.0,4.5), (0.0,4.5), (-10.0,0)),
                         barrelColor="blue", cupColor="red")
@@ -300,15 +372,52 @@ function draw_cylinder2(c; alpha=0.2, figsize=(16,16),
 	ax, fig
 end
 
-# ╔═╡ 8c7035f0-82fd-4c86-ab63-5cdd3b4d7539
-function plot_cylinder(gammas, x0, y0, zg, zb, za, r; num_plot=5, figsize=(16,16))
+# ╔═╡ 578639df-4bec-42cf-97c4-0b510cd32b26
+function draw_cylinder2(c, c2; alpha=0.3, figsize=(16,16), 
+                        DWORLD=false, 
+                        WDIM=((0.0,4.5), (0.0,4.5), (-10.0,0)),
+                        barrelColor="blue", cupColor="red")
 	
+	fig = PyPlot.figure(figsize=figsize)
+    ax = PyPlot.subplot(111, projection="3d")
+
+	P, P2, P3 = surfaces(c2)
+
+	if DWORLD
+        ax.set_xlim3d(0.0, 10.0)
+        ax.set_ylim3d(0.0, 10.0)
+        ax.set_zlim3d(-10.0, 0.0)
+    end
+
+	ax.plot_surface(P[1], P[2], P[3], color=barrelColor, alpha=alpha)
+	ax.plot_surface(P2[1], P2[2], P2[3], color=cupColor, alpha=alpha)
+    ax.plot_surface(P3[1], P3[2], P3[3], color=cupColor, alpha=alpha)
+
+	PP, _, _ = surfaces(c)
+	ax.plot_surface(PP[1], PP[2], PP[3], color="orange", alpha=0.1)
+
+
+	
+	ax, fig
+end
+
+# ╔═╡ 8c7035f0-82fd-4c86-ab63-5cdd3b4d7539
+function plot_cylinder(gammas, jsteps, x0, y0, zg, zb, za, r; 
+                       num_plot=5, figsize=(16,16))
+
+	c = Cylinder(r, x0, y0, za, zg)
 	c2 = Cylinder(r, x0, y0, zb, zg)
-	ax, fig = draw_cylinder2(c2; alpha=0.2, figsize=figsize, DWORLD=false)
+	ax, fig = draw_cylinder2(c, c2; alpha=0.2, figsize=figsize, DWORLD=false)
 
 	# Define a set of colors to cycle through for different gammas.
 	colors = [:red, :blue, :green, :orange, :purple, :cyan, :magenta, :yellow]
 
+	# Extract x, y, z coordinates for each step in the jsteps.
+	xs = [step[1] for step in jsteps]
+	ys = [step[2] for step in jsteps]
+	zs = [step[3] for step in jsteps]
+	ax.plot(xs, ys, zs, linestyle="--", color=:cyan, linewidth=1)
+	
 	# Loop over the selected gammas.
 	#for i in 1:min(num_plot, length(gammas))
 	i = num_plot
@@ -323,9 +432,9 @@ function plot_cylinder(gammas, x0, y0, zg, zb, za, r; num_plot=5, figsize=(16,16
 	
 	ax.scatter(xs, ys, zs, s=25, color=:red)
 
-	println("xs =",xs)
-	println("ys =",ys)
-	println("zs =",zs)
+	#println("xs =",xs)
+	#println("ys =",ys)
+	#println("zs =",zs)
 
 	# Connect the points with a dashed line.
 	 ax.plot(xs, ys, zs, linestyle="--", color=:red, linewidth=1)
@@ -333,6 +442,78 @@ function plot_cylinder(gammas, x0, y0, zg, zb, za, r; num_plot=5, figsize=(16,16
 
 	fig
 end
+
+# ╔═╡ ef38565b-5a8d-41c2-a4f1-21cfbe0cb3aa
+function draw_cylinder_proj(jsteps, gammas, r, x0, y0, Za, Zg, Zs, pitch; 
+                            alpha=0.3, figsize=(8,8))
+
+
+	c = Cylinder(r, x0, y0, Za, Zg)
+	P, _, _ = surfaces(c)
+	
+	X = vec(P[1])
+	Y = vec(P[1])
+    Z = vec(P[3])
+
+	# Extract x, y, z coordinates for each step in the jsteps.
+	xs = [step[1] for step in jsteps]
+	ys = [step[2] for step in jsteps]
+	zs = [step[3] for step in jsteps]
+
+	
+	
+	# Choose a color for this gamma (cycling if needed).
+	#col = colors[mod1(i, length(colors))]
+	
+	
+	
+	fig, axs = PyPlot.subplots(1, 2, figsize=figsize)
+	# Draw a vertical line at x = 5
+	axs[1].axhline(y=Zg, color="black", linestyle="--", linewidth=2, label=false)
+	axs[1].axhline(y=Za, color="black", linestyle="--", linewidth=2, label=false)
+	axs[1].axhline(y=Zs, color="black", linestyle="solid", linewidth=2, label=false)
+
+	axs[1].axvline(x=x0-r, color="black", linestyle="--", linewidth=2, label=false)
+	axs[1].axvline(x=x0+r, color="black", linestyle="--", linewidth=2, label=false)
+	
+	# X-Z projection: plot X vs Z.
+    #axs[1].scatter(X, Z, s=1, color="blue")
+	axs[1].plot(xs, zs, linestyle=:solid, color=:red, linewidth=3)
+	
+    axs[1].set_xlabel("X (mm)")
+    axs[1].set_ylabel("Z (mm)")
+    axs[1].set_title("X–Z Projection")
+	axs[1].set_xlim(0, pitch)
+	axs[1].set_ylim(Zs, Zg)
+	for gamma in gammas
+		# Extract x, y, z coordinates for each step in the gamma.
+		xgs = [step[1] for step in gamma]
+		zgs = [step[3] for step in gamma]
+
+		axs[1].scatter(xgs, zgs, s=1, color="cyan")
+		axs[1].plot(xgs, zgs, linestyle="--", color=:cyan, linewidth=1)
+	end
+    
+    # Y-Z projection: plot Y vs Z.
+    axs[2].scatter(Y, Z, s=1, color="blue")
+	axs[2].plot(ys, zs, linestyle=:solid, color=:cyan, linewidth=1)
+    axs[2].set_xlabel("Y (mm)")
+    axs[2].set_ylabel("Z (mm)")
+    axs[2].set_title("Y–Z Projection")
+    axs[2].set_xlim(0, pitch)
+	axs[2].set_ylim(Zs, Zg)
+    PyPlot.tight_layout()
+	fig
+end
+
+# ╔═╡ 84704333-6927-4b78-be39-37e32c90ef15
+P, _, _ = surfaces(c)
+
+# ╔═╡ dbc021f7-9b18-4aa2-83d3-ad44bb887f58
+length(vec(P[1]))
+
+# ╔═╡ baadcc6b-36cb-49ae-aa06-686b267b4b4c
+length(vec(P[3]))
 
 # ╔═╡ 94a48200-aca1-4167-9e45-581e53cfdad5
 """Normal to the cylinder barrel"""
@@ -383,15 +564,81 @@ function get_coord_and_yield(tr::AbstractMatrix, zg::Float64, ymm::Float64)
 		YL, XC, YC, ZC
 	end
 
+# ╔═╡ 05ac2255-16ed-4bdd-a4c4-c9e611cda5d0
+"""
+	Solve the intersection with the cylinder wall 
+	
+"""
+function solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=1e-16)
+	a = vx^2 + vy^2
+	b = 2 * ((x-x0) * vx + (y-y0) * vy)
+	c = (x - x0)^2 + (y - y0)^2 - R^2
+
+	debug("####solve_t_barrel: x-x0 = $(x-x0), y-y0=$(y-y0), vx = $(vx), vy=$(vy),R = $(R)")
+	debug("####a = $(a), b = $(b), c = $(c)")
+	if abs(a) < eps
+		return nothing
+	end
+
+	disc = b^2 - 4 * a * c
+	debug("####disc = $(disc)")
+	if disc < 0
+		return nothing
+	end
+
+	sqrt_disc = sqrt(disc)
+	t1 = (-b + sqrt_disc) / (2 * a)
+	t2 = (-b - sqrt_disc) / (2 * a)
+
+	debug("####t1 = $(t1), t2 = $(t2)")
+
+	ts_candidates = Float64[]
+	#if t1 > 0
+	#	push!(ts_candidates, t1)
+	#elseif abs(t1) < eps
+	#	push!(ts_candidates, 0.0)
+	#end
+	#if t2 > 0
+	#	push!(ts_candidates, t2)
+	#elseif abs(t2) < eps
+	#	push!(ts_candidates, 0.0)
+	#end
+
+	if t1 > 0 && t2 > 0
+		push!(ts_candidates, t1)
+		push!(ts_candidates, t2)
+	elseif t1 > 0 && t2 <= 0
+		push!(ts_candidates, t1)
+	elseif t2 >0 && t1 <= 0
+		push!(ts_candidates, t2)
+	elseif t1 >0 && abs(t2) <= eps
+		push!(ts_candidates, t1)
+	elseif t2 >0 && abs(t1) <= eps
+		push!(ts_candidates, t2)
+	elseif abs(t1) < eps || abs(t2) < eps
+		push!(ts_candidates, 0.0)
+	end
+
+	if !isempty(ts_candidates)
+		return minimum(ts_candidates)
+	else
+		return nothing
+	end
+end
+
+
+# ╔═╡ e361a98f-f008-48f5-a4cb-94a100702460
+solve_t_barrel(3.1989419320430073, 4.486748838128013, 3.0, 3.0, -0.7038555940531903, -0.2260637209182603, 1.5; eps=1e-16)
+
 # ╔═╡ 9e8d1efe-0f54-4afc-a956-3664cf972d8a
 """
  Solve for time to reach the top (z = ztop).
 """
 function solve_t_top(z, vz, ztop; eps=1e-10)
-	println("####solve_t_top: z = $(z), vz=$(vz), ztop=$(ztop)")
+	debug("####solve_t_top: z = $(z), vz=$(vz), ztop=$(ztop)")
     if vz > eps
         dt = (ztop - z) / vz
-		println("####solve_t_top: dt = $(dt)")
+		debug("####solve_t_top: dt = $(dt)")
         if dt > eps
             return dt
         end
@@ -407,10 +654,10 @@ end
  Solve for time to reach the bottom (z = zb).
 """
 function solve_t_bottom(z, vz, zb; eps=1e-10)
-	println("####solve_t_bottom: z = $(z), vz=$(vz), zb=$(zb)")
+	debug("####solve_t_bottom: z = $(z), vz=$(vz), zb=$(zb)")
     if vz < -eps
         dtb = (abs(zb) -abs(z)) / abs(vz)
-		println("####solve_t_bottom: dt = $(dtb)")
+		debug("####solve_t_bottom: dt = $(dtb)")
         if dtb > eps
             return dtb
         end
@@ -419,59 +666,6 @@ function solve_t_bottom(z, vz, zb; eps=1e-10)
 end
 
 # ╔═╡ 5b913924-1f00-4fc7-9c6a-0ede1d400f5c
-"""
-	Solve the intersection with the cylinder wall 
-	
-"""
-function solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=1e-16)
-	a = vx^2 + vy^2
-	b = 2 * ((x-x0) * vx + (y-y0) * vy)
-	c = (x - x0)^2 + (y - y0)^2 - R^2
-
-	#println("####solve_t_barrel: x-x0 = $(x-x0), y-y0=$(y-y0), vx = $(vx), vy=$(vy),R = $(R)")
-	#println("####a = $(a), b = $(b), c = $(c)")
-	if abs(a) < eps
-		return nothing
-	end
-
-	disc = b^2 - 4 * a * c
-	#println("####disc = $(disc)")
-	if disc < 0
-		return nothing
-	end
-
-	sqrt_disc = sqrt(disc)
-	t1 = (-b + sqrt_disc) / (2 * a)
-	t2 = (-b - sqrt_disc) / (2 * a)
-
-	println("####t1 = $(t1), t2 = $(t2)")
-
-	ts_candidates = Float64[]
-	#if t1 > 0
-	#	push!(ts_candidates, t1)
-	#elseif abs(t1) < eps
-	#	push!(ts_candidates, 0.0)
-	#end
-	#if t2 > 0
-	#	push!(ts_candidates, t2)
-	#elseif abs(t2) < eps
-	#	push!(ts_candidates, 0.0)
-	#end
-
-	if t1 > 0 && t2 <= 0
-		push!(ts_candidates, t1)
-	elseif t2 >0 && t1 <= 0
-		push!(ts_candidates, t2)
-	elseif abs(t1) < eps || abs(t2) < eps
-		push!(ts_candidates, 0.0)
-	end
-
-	if !isempty(ts_candidates)
-		return minimum(ts_candidates)
-	else
-		return nothing
-	end
-end
 
 
 
@@ -653,11 +847,33 @@ Simulate photons along the trajectory.
 At each step along the trajectory, generate a number of photons.
 Propagate them along.
 Count photons that hit a SiPM (if the impact falls within a sensor active area).
+
+- electron_post: the absolute position of the electron
+- trj: A matrix holding a large number of trajectories, starting in the collector plane (where the electron_pos is defined) and ending in the anode.
+- The ELCC structure
+- The SiPM structure
+- ymm: yield/mm in the EL region
+- p1: probability of the photon to be absorbed in the first interaction
+- p2: probability to be absorbed in further interactions.
+- samplet: sampling of trayectory (to make it shorter than the frozen ones)
+- maxgam: allows to generate less gammas than stipulated by the yield.
+- saveg: allows to save gammas for plotting.
+- savet: allows to save trajectory for plotting.
+- ncmax: max number of bounces allowd for a given photon
+- eps: tolerance factor
 """
 function simulate_photons_along_trajectory(electron_pos::Vector{Float64},                                                       trj::AbstractMatrix, 
 	                                       elcc::ELCCGeometry,
 	                                       sipm::SiPMGeometry; 
-										   ymm=10, p1=1.00, p2=0.5, eps=1e-12)
+										   ymm=10, # yield per mm
+										   p1=1.00, # Prob abs first interaction
+										   p2=0.5,  # Prob abs >1 interaction
+										   samplet=1e+6, # sample trajectory
+										   maxgam=1e6, # max number of gammas
+										   saveg = false, # save gammas for plotting
+										   savet = false, # save trj for plotting
+                                           ncmax=20, # max number of bounces
+										   eps=1e-16) # tolerance
 	
 	sipm_indices, sipm_origin =find_sipm(electron_pos, sipm)
 	dice_indices, dice_origin, xlocal = find_dice(electron_pos, elcc)
@@ -669,6 +885,7 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 	x0 = y0 = pp + R
 	ztop = elcc.Zg
 	zbot = elcc.Za
+	
 	println("--simulate_photons_along_trajectory--")
 	println("r hole = $(R) position of hole x0=$(x0) y0=$(y0)")
 	println("->absolute electron position $(electron_pos)")
@@ -681,27 +898,40 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 	YL, XC, YC, ZC = get_coord_and_yield(trj, ztop, ymm)
 
 	gammas = Vector{Vector{Vector{Float64}}}()
-	# photon loop
-	#for ri in range(1, stop=length(YL), length=3)
-	for ri in range(1, 2)
-	#for i in range(1, length(YL))  # steps
-		i =Int(ri)
+	jsteps =Vector{Vector{Float64}}()
+	NTOP = Vector{Int}()
+	NBOT = Vector{Int}()
+	SIJ = Vector{Vector{Tuple{Int, Int}}}()
+	
+	# Trajectory steps
+	ltrj = min(length(YL), samplet)
+	for ri in range(1, stop=length(YL), length=ltrj)
+	
+		i =Int(floor(ri))
 		xe = XC[i]
 		ye = YC[i]
 		ze = ZC[i]
 		yy = YL[i]
+
+		if savet
+			push!(jsteps, [xe, ye, ze])
+		end
+
+		yield = min(yy, maxgam)
 		count_top = 0
 		count_bot = 0
-		println("--------000-------")
-		println("-->for step =$(i), xe = $(xe), y=$(ye), z=$(ze), yield=$(yy)")
+		println("--------000------------\n")
+		println("-->for step =$(i), xe = $(xe), y=$(ye), z=$(ze), yield=$(yield)")
+		println("--------000-----------\n")
 
+		GIJ = Vector{Tuple{Int, Int}}()
 		
-		for ng in range(1, yy) # number of photons per step
+		for ng in range(1, yield) # number of photons per step
 			vx, vy, vz= generate_direction() # generate random direction
 			
-			println("------xxxx--------")
+			println("------xxxx-----------\n")
 			println("--->for ng =$(ng), vx =$(vx), vy =$(vy), vz = $(vz)")
-			println("------xxxx--------")
+			println("------xxxx-----------\n")
 
 			n_collisions = 0
 			
@@ -713,6 +943,10 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 			z = ze
 
 	        while alive
+				if n_collisions > ncmax
+					println("exceeds number of collisions =", n_collisions)
+					break
+				end
 	            t_barrel = solve_t_barrel(x, y, x0, y0, vx, vy, R; eps=1e-16)
 	            t_top    = solve_t_top(z, vz, ztop; eps=eps)
 	            t_bottom = solve_t_bottom(z, vz, zbot; eps=eps)
@@ -758,26 +992,32 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 				push!(steps, [x_new, y_new, z_new])
 	
 	            if surf == "bottom" # anode 
-	                
-	                count_bot += 1
 	                alive = false
+	                count_bot += 1
+					if saveg
+						push!(gammas, steps)
+					end
+					
 					println("--->photon hits bottom at x =$(x_new), y = $(y_new), count =$(count_bot)")
-					push!(gammas, steps)
-
-					# find absolute position
+					
+					# keep position of sipm
 					xabs, yabs = find_abspos((x_new, y_new), sipm_indices, sipm)
 					println("--->xabs =$(xabs), yabs = $(yabs)")
 					
 					sipmij, _ = find_sipm(collect((xabs, yabs)), sipm)
 					println("--->sipm(i,j) =($(sipmij[1]), $(sipmij[2]))")
-					
+
+					push!(GIJ, (sipmij[1], sipmij[2]))
+						
 	            elseif surf == "top"
-	                # Photon is lost when reaching the top (gate).
 	                alive = false
 					count_top += 1
+					if saveg
+						push!(gammas, steps)
+					end
+					
 					println("--->photon hits top at x =$(x_new), y = $(y_new), count =$(count_top)")
-					push!(gammas, steps)
-	
+
 	            else  # "barrel"
 	                n_collisions += 1
 					
@@ -790,9 +1030,8 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 	                x, y, z = x_new, y_new, z_new
 					vx0, vy0, vz0 = vx, vy, vz
 	                    
-
 					cteta = 1.0
-					while cteta >= 0
+					while cteta >= 0 #photon goes against the wall
 						p = (n_collisions == 1) ? p1 : p2
 						if rand() < p # Photon is re-emitted 
 							vx, vy, vz = generate_direction()
@@ -803,44 +1042,67 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 
 							if cteta >=0
 								println("---->hit wall, n_collisions=", n_collisions)
+							else
+								println("---->photon goes away from wall")
 							end
 							
 						else   # Photon is absorbed
 							println("---->photon absorbed in barrel")
-							alive = false
-							push!(gammas, steps)
+							alive = false	
+							if saveg
+								push!(gammas, steps)
+							end
+							
 							break
 						end
 						 n_collisions += 1
-					end
-	                    
+					end   
 					println("x = $(x), y=$(y), z=$(z)")
 					println("vx = $(vx), vy=$(vy), vz=$(vz)")
 					
             	end
 			end
 		end
+		push!(NTOP, count_top)
+		push!(NBOT, count_bot)
+		push!(SIJ, GIJ)
 	end
-	gammas
+	NTOP, NBOT, SIJ, gammas, jsteps
 end
 
-# ╔═╡ b4bec083-392c-45f3-b440-91edd3b5e5fc
-gammas = simulate_photons_along_trajectory(electron_pos, tr, elcc, sipm; p1=1.00, p2=0.7, ymm=ymm/2)
+# ╔═╡ 27669660-d21b-4e10-904d-b8142e8447dd
+if SimulatePhotons
+	ntop, nbot, sij, gammas, jsteps = simulate_photons_along_trajectory(electron_pos,
+		                                                        tr, 
+	                                                            elcc,
+	                                                            sipm; 
+										                        ymm=ymm,
+										                        p1=1.00, 
+										                        p2=0.5,  
+										                        samplet=500, 
+										                        maxgam=2,
+	                                                            saveg=true,
+	                                                            savet = true)
+	
+end
 
-# ╔═╡ 198f564c-7588-459f-86b9-69e36606fa7e
-typeof(gammas)
+# ╔═╡ 8009f2f9-8931-45f4-9f66-41ea283563a5
+jsteps[end]
 
 # ╔═╡ 23167ba6-4ddc-49b8-9aec-b9148d09befc
 gammas
 
+# ╔═╡ ae488bf8-706a-4d57-8ac7-412f0a43bd08
+gamma=gammas[1]
+
 # ╔═╡ 8f537416-301f-427f-a584-b91cbd83450d
 begin
- 	fig = plot_cylinder(gammas, 3.0, 3.0, 0.0, -5.0, -10.0, 1.5; num_plot=18)
+ 	fig = plot_cylinder(gammas, jsteps, x0, y0, Zg, Za, Zs, R; figsize=(6,6), num_plot=50)
 	
 end
 
-# ╔═╡ 02ffafb2-8ca6-4fcd-a267-c5e7528137cc
-PyPlot.close(fig)
+# ╔═╡ a5d8d56f-641c-4a45-88e3-737f992802e2
+draw_cylinder_proj(jsteps, gammas, R, x0, y0, Za, Zg, Zs, pitch; alpha=0.3, figsize=(8,8))
 
 # ╔═╡ e97ec2de-accb-4336-bf0e-2247bbaeb3e2
 gammas
@@ -1172,10 +1434,10 @@ function plot_gammas(gammas::Vector{Vector{Vector{Float64}}},
     	col = colors[(i - 1) % length(colors) + 1]
     
     	# Plot points for each step.
-    	p1 = scatter!(p1, xs, ys, zs, label=false, marker=:circle, markersize=2, 
+    	p1 = scatter!(p1, xs, ys, zs, label=false, marker=:circle, markersize=1, 
 			     color=col)
     	# Connect the points with a dashed line.
-    	p1 =plot!(p1, xs, ys, zs, label="", linestyle=:dash, linewidth=2, color=col)
+    	p1 =plot!(p1, xs, ys, zs, label="", linestyle=:dash, linewidth=1, color=col)
 	end
 
     plot(p1,p2)
@@ -1351,6 +1613,9 @@ and must satisfy ``z_b \le z(t) \le z_a`` to lie within the finite cylinder.
 # ╠═a333497c-c5fc-49a7-a8ca-d82a7dcd27ad
 # ╠═57248e63-9e36-4644-a6c4-5a3aa1808e29
 # ╠═eada2802-68a7-4663-a2c0-c1ca41b74601
+# ╠═279bd076-8960-4f17-b719-f3d985ffdd5c
+# ╠═1046cd03-a4b0-411f-8107-a2d3df10a386
+# ╠═aa3b92ad-7fbf-4b3e-9eae-b1e9dcaf2eb4
 # ╠═2617ae05-e1db-473a-9b0f-befeea6d0e12
 # ╠═a891cff0-6910-4f78-8fc5-ff4e90163a7e
 # ╠═3b1d7427-73ca-4dca-99f9-93b2cb6df9a8
@@ -1375,18 +1640,30 @@ and must satisfy ``z_b \le z(t) \le z_a`` to lie within the finite cylinder.
 # ╠═2144e49f-1505-4c19-a047-7733c7cfc0c1
 # ╠═d474342a-81ca-4504-86a9-52925211b685
 # ╠═1ef1b221-da82-4852-bfb3-ffe1b2b50600
-# ╠═198f564c-7588-459f-86b9-69e36606fa7e
+# ╠═c5924aa7-a04b-4820-aafb-2c71a5bb289d
+# ╠═27669660-d21b-4e10-904d-b8142e8447dd
 # ╠═b4bec083-392c-45f3-b440-91edd3b5e5fc
+# ╠═8009f2f9-8931-45f4-9f66-41ea283563a5
 # ╠═42392447-15b4-48ed-ad52-cf00aefc435f
 # ╠═604a8022-d687-4684-8fd2-0178a3192452
+# ╠═e361a98f-f008-48f5-a4cb-94a100702460
 # ╠═7ec27076-edd8-4d3f-b691-8cf877144f98
 # ╠═1dad2fcb-836e-46a8-bb2b-8d43f25c4767
 # ╠═d586338c-ad5a-42b4-aa12-ec2a59b583f8
 # ╠═23167ba6-4ddc-49b8-9aec-b9148d09befc
 # ╠═57dec276-2cd4-4f12-9595-8cb42cbf08d9
+# ╠═578639df-4bec-42cf-97c4-0b510cd32b26
+# ╠═ef38565b-5a8d-41c2-a4f1-21cfbe0cb3aa
 # ╠═8c7035f0-82fd-4c86-ab63-5cdd3b4d7539
+# ╠═ae488bf8-706a-4d57-8ac7-412f0a43bd08
 # ╠═8f537416-301f-427f-a584-b91cbd83450d
+# ╠═657f8596-decb-41fc-bb83-f23839d8de32
+# ╠═84704333-6927-4b78-be39-37e32c90ef15
+# ╠═dbc021f7-9b18-4aa2-83d3-ad44bb887f58
+# ╠═baadcc6b-36cb-49ae-aa06-686b267b4b4c
+# ╠═a5d8d56f-641c-4a45-88e3-737f992802e2
 # ╠═02ffafb2-8ca6-4fcd-a267-c5e7528137cc
+# ╠═e8f9953e-4983-4825-abfa-829653aa0d26
 # ╠═e97ec2de-accb-4336-bf0e-2247bbaeb3e2
 # ╠═0aa7a4ef-5136-4126-a486-c40eaad99557
 # ╠═23d039f4-b1db-4778-be0b-2fa01075a1a2
@@ -1400,6 +1677,7 @@ and must satisfy ``z_b \le z(t) \le z_a`` to lie within the finite cylinder.
 # ╠═94a48200-aca1-4167-9e45-581e53cfdad5
 # ╠═c2f6d14e-cfb7-4f53-88cc-9da2676f1ecb
 # ╠═3c238213-30c7-41a7-bd7b-50f8c09b7adf
+# ╠═05ac2255-16ed-4bdd-a4c4-c9e611cda5d0
 # ╠═9e8d1efe-0f54-4afc-a956-3664cf972d8a
 # ╠═9ebb47ac-b76c-4be4-8336-6da26f26c6c5
 # ╠═5b913924-1f00-4fc7-9c6a-0ede1d400f5c

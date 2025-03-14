@@ -179,6 +179,9 @@ end
 # ╔═╡ b2c37cf5-3a69-408c-9324-7ec1cdef6d18
 ymm = yield_mm_p_10b(Zg, Za, Vg, Va)
 
+# ╔═╡ ce43b3cb-69b9-43d3-beba-d83ac5f0f1a6
+140 * 20 - 1160
+
 # ╔═╡ 321fb432-4464-47b8-94ac-30d466670224
 md"""
 ## ELCC geometry
@@ -1625,6 +1628,7 @@ and must satisfy ``z_b \le z(t) \le z_a`` to lie within the finite cylinder.
 # ╠═ac79ab2e-af61-499a-94e7-964a8f04b111
 # ╠═2c67d2f7-4d20-4ff6-ba81-c6902980478d
 # ╠═b2c37cf5-3a69-408c-9324-7ec1cdef6d18
+# ╠═ce43b3cb-69b9-43d3-beba-d83ac5f0f1a6
 # ╠═321fb432-4464-47b8-94ac-30d466670224
 # ╠═154133b1-81bd-4bfe-86dc-cb3ccfec48f0
 # ╠═a0dfd610-50ca-4a75-9ab8-8c3937f31c33

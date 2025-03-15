@@ -24,15 +24,19 @@ struct SiPMGeometry
 	Y::Float64         # Overall SiPM panel y dimension (mm)
 end
 
-
-begin
 	ndicex(elcc::ELCCGeometry) = Int(floor(elcc.X/elcc.pitch))
 	ndicey(elcc::ELCCGeometry) = Int(floor(elcc.Y/elcc.pitch))
 	nsipmx(sipm::SiPMGeometry) = Int(floor(sipm.X/sipm.pitch))
 	nsipmy(sipm::SiPMGeometry) = Int(floor(sipm.Y/sipm.pitch))
+
+
+struct GCounters
+	total::Int  # total gammas emitted in ELCC
+	top::Int    # gammas that end up in top
+	bottom::Int # gammas that end up in bottom
 end
 
-set_log_level(DEBUG)
+set_log_level(DEBUG2)
 
 """
 Computes the yield per mm. 
@@ -174,6 +178,26 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 										   savet = false, # save trj for plotting
                                            ncmax=20, # max number of bounces
 										   eps=1e-14) # tolerance
+
+	function count_bottom_gammas(i, ng, vx, vy, vz, x_new, y_new)
+		
+		count_bot += 1
+		xabs, yabs = find_abspos((x_new, y_new), sipm_indices, sipm)
+		sipmij, _ = find_sipm(collect((xabs, yabs)), sipm)
+		CIJ[sipmij[1], sipmij[2]]+=1
+
+		debug2("--------000------------\n")
+		debug2("-->for step =$(i)")
+		debug2("--------000-----------\n")
+
+		debug2("--->for ng =$(ng), vx =$(vx), vy =$(vy), vz = $(vz)")
+		debug2("--->photon hits bottom at x =$(x_new), y = $(y_new), count =$(count_bot)")
+		debug2("--->xabs =$(xabs), yabs = $(yabs)")
+		debug2("--->sipm(i,j) =($(sipmij[1]), $(sipmij[2]))")
+		
+		#push!(GIJ, (sipmij[1], sipmij[2]))
+		
+	end
 	
 	sipm_indices, sipm_origin =find_sipm(electron_pos, sipm)
 	dice_indices, dice_origin, xlocal = find_dice(electron_pos, elcc)
@@ -197,10 +221,15 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 
 	gammas = Vector{Vector{Vector{Float64}}}()
 	jsteps =Vector{Vector{Float64}}()
-	NTOP = Vector{Int}()
-	NBOT = Vector{Int}()
-	SIJ = Vector{Vector{Tuple{Int, Int}}}()
+	# NTOP = Vector{Int}()
+	# NBOT = Vector{Int}()
+	# SIJ = Vector{Vector{Tuple{Int, Int}}}()
 	
+	CIJ = zeros(Int, nsipmx(sipm), nsipmy(sipm))
+	count_top = 0
+	count_tot = 0
+	count_bot = 0
+
 	# Trajectory steps
 	ltrj = min(length(YL), samplet)
 	for ri in range(1, stop=length(YL), length=ltrj)
@@ -216,24 +245,24 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 		end
 
 		yield = min(yy, maxgam)
-		count_top = 0
-		count_bot = 0
+		
 		debug("--------000------------\n")
 		debug("-->for step =$(i), xe = $(xe), y=$(ye), z=$(ze), yield=$(yield)")
 		debug("--------000-----------\n")
 
-		GIJ = Vector{Tuple{Int, Int}}()
+		#GIJ = Vector{Tuple{Int, Int}}()
 		
 		for ng in range(1, yield) # number of photons per step
+
+			count_tot+=1
+			n_collisions = 0
+			alive = true
+
 			vx, vy, vz= generate_direction() # generate random direction
 			
 			debug("------xxxx-----------\n")
 			debug("--->for ng =$(ng), vx =$(vx), vy =$(vy), vz = $(vz)")
 			debug("------xxxx-----------\n")
-
-			n_collisions = 0
-			
-        	alive = true
 
 			if saveg
 				steps = Vector{Vector{Float64}}()
@@ -249,6 +278,8 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 					warn("exceeds number of collisions =", n_collisions)
 					break
 				end
+
+				# gamma inside hole
 				if z < elcc.Zg && z > elcc.Za
 	            	t_barrel = solve_t_barrel(x, y, x0, y0, vx, vy, R; eps= eps)
 				elseif z < elcc.Za && vz >0
@@ -275,17 +306,27 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 						x_new = x + t_bottom * vx
 						y_new = y + t_bottom * vy
 						z_new = z + t_bottom * vz
-						push!(steps, [x_new, y_new, z_new])
+						
+						if savet
+							push!(steps, [x_new, y_new, z_new])
+						end
 						if saveg
 							push!(gammas, steps)
 						end
-						count_bot += 1
-						# keep position of sipm
-						xabs, yabs = find_abspos((x_new, y_new), sipm_indices, sipm)
-						debug("--->xabs =$(xabs), yabs = $(yabs)")
-						sipmij, _ = find_sipm(collect((xabs, yabs)), sipm)
-						debug("--->sipm(i,j) =($(sipmij[1]), $(sipmij[2]))")
-						push!(GIJ, (sipmij[1], sipmij[2]))
+
+						count_bottom_gammas(i, ng, vx, vy, vz, x_new, y_new)
+
+						# if saveg
+						# 	push!(gammas, steps)
+						# end
+						# count_bot += 1
+						# # keep position of sipm
+						# xabs, yabs = find_abspos((x_new, y_new), sipm_indices, sipm)
+						# debug("--->xabs =$(xabs), yabs = $(yabs)")
+						# sipmij, _ = find_sipm(collect((xabs, yabs)), sipm)
+						# debug("--->sipm(i,j) =($(sipmij[1]), $(sipmij[2]))")
+						# #push!(GIJ, (sipmij[1], sipmij[2]))
+						# CIJ[sipmij[1], sipmij[2]]+=1
 						break
 					end
 				else
@@ -333,25 +374,35 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 	            z_new = z + t_min * vz
 
 				debug("--->x_new =$(x_new), y_new =$(y_new), z_new =$(z_new)")
-				push!(steps, [x_new, y_new, z_new])
-	
+				if savet
+					push!(steps, [x_new, y_new, z_new])
+				end
+				
 	            if surf == "bottom" # anode 
 	                alive = false
-	                count_bot += 1
+
 					if saveg
 						push!(gammas, steps)
 					end
-					
-					debug("--->photon hits bottom at x =$(x_new), y = $(y_new), count =$(count_bot)")
-					
-					# keep position of sipm
-					xabs, yabs = find_abspos((x_new, y_new), sipm_indices, sipm)
-					debug("--->xabs =$(xabs), yabs = $(yabs)")
-					
-					sipmij, _ = find_sipm(collect((xabs, yabs)), sipm)
-					debug("--->sipm(i,j) =($(sipmij[1]), $(sipmij[2]))")
 
-					push!(GIJ, (sipmij[1], sipmij[2]))
+					count_bottom_gammas(i, ng, vx, vy, vz, x_new, y_new)
+
+	                # count_bot += 1
+					# if saveg
+					# 	push!(gammas, steps)
+					# end
+					
+					# debug("--->photon hits bottom at x =$(x_new), y = $(y_new), count =$(count_bot)")
+					
+					# # keep position of sipm
+					# xabs, yabs = find_abspos((x_new, y_new), sipm_indices, sipm)
+					# debug("--->xabs =$(xabs), yabs = $(yabs)")
+					
+					# sipmij, _ = find_sipm(collect((xabs, yabs)), sipm)
+					# debug("--->sipm(i,j) =($(sipmij[1]), $(sipmij[2]))")
+
+					# CIJ[sipmij[1], sipmij[2]]+=1
+					#push!(GIJ, (sipmij[1], sipmij[2]))
 						
 	            elseif surf == "top"
 	                alive = false
@@ -364,19 +415,22 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 
 	            else  # "barrel only if we are still in hole"
 
-					if z > elcc.Zg # bounced higher than gate. Count and kill
+					if z > elcc.Zg # bounced higher than gate. Extrapolate, count and kill
 						t_top    = solve_t_top(z_new, vz, elcc.Zc; eps=eps)
 						debug("--->bounce out on top: t_top =$(t_top)")
 						if t_top != nothing 
 							x_new = x + t_top * vx
 	            			y_new = y + t_top * vy
 	            			z_new = z + t_top * vz
-							push!(steps, [x_new, y_new, z_new])
+
+							if savet
+								push!(steps, [x_new, y_new, z_new])
+							end
 							if saveg
 								push!(gammas, steps)
 							end
 							count_top += 1
-							
+						
 							break
 						end
 					elseif z < elcc.Za # bounced lower than anode. Extrapolate, count and kill
@@ -387,17 +441,29 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 							x_new = x + t_bottom * vx
 	            			y_new = y + t_bottom * vy
 	            			z_new = z + t_bottom * vz
-							push!(steps, [x_new, y_new, z_new])
+
+							if savet
+								push!(steps, [x_new, y_new, z_new])
+							end
+
 							if saveg
 								push!(gammas, steps)
 							end
-							count_bot += 1
-							# keep position of sipm
-							xabs, yabs = find_abspos((x_new, y_new), sipm_indices, sipm)
-							debug("--->xabs =$(xabs), yabs = $(yabs)")
-							sipmij, _ = find_sipm(collect((xabs, yabs)), sipm)
-							debug("--->sipm(i,j) =($(sipmij[1]), $(sipmij[2]))")
-							push!(GIJ, (sipmij[1], sipmij[2]))
+
+							count_bottom_gammas(i, ng, vx, vy, vz, x_new, y_new)
+
+							# if saveg
+							# 	push!(gammas, steps)
+							# end
+							# count_bot += 1
+							# # keep position of sipm
+							# xabs, yabs = find_abspos((x_new, y_new), sipm_indices, sipm)
+							# debug("--->xabs =$(xabs), yabs = $(yabs)")
+							# sipmij, _ = find_sipm(collect((xabs, yabs)), sipm)
+							# debug("--->sipm(i,j) =($(sipmij[1]), $(sipmij[2]))")
+							# #push!(GIJ, (sipmij[1], sipmij[2]))
+							# CIJ[sipmij[1], sipmij[2]]+=1
+
 							break
 						end
 					end
@@ -416,7 +482,6 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
 	                    
 					cteta = 1.0
 					while cteta >= 0 #photon goes against the wall
-						#p = (n_collisions == 1) ? p1 : p2
 						if rand() < p # Photon is re-emitted 
 							vx, vy, vz = generate_direction()
 							cteta = dot([vx,vy,vz],[vx0,vy0,vx0])
@@ -447,11 +512,12 @@ function simulate_photons_along_trajectory(electron_pos::Vector{Float64},       
             	end
 			end
 		end
-		push!(NTOP, count_top)
-		push!(NBOT, count_bot)
-		push!(SIJ, GIJ)
+		# push!(NTOP, count_top)
+		# push!(NBOT, count_bot)
+		# push!(SIJ, GIJ)
 	end
-	NTOP, NBOT, SIJ, gammas, jsteps
+	#NTOP, NBOT, CIJ, gammas, jsteps
+	GCounters(count_tot, count_top, count_bot), CIJ, gammas, jsteps
 end
 
 
@@ -670,6 +736,37 @@ function pstructure(elcc::ELCCGeometry, sipm::SiPMGeometry)
 end
 
 
+function p_hitmatrix(mhit::Matrix{Int64}, sipm::SiPMGeometry)
+
+	min_INT = 0.0
+	max_INT = maximum(mhit)
+    # Plot the SiPM plane.
+    # For visualization, we show the SiPM panel as a rectangle.
+    sipm_rect = Shape([0, sipm.X, sipm.X, 0], [0, 0, sipm.Y, sipm.Y])
+    p2 = plot(sipm_rect, fillcolor=:lightgreen, alpha=0.3, label=false, 
+		      aspect_ratio=1,
+              xlabel="x (mm)", ylabel="y (mm)", title="SiPM Hits")
+    # Draw SiPM boundaries (sensors are squares of side sipm.sipmSize centered in cells of size sipm.pitch).
+    n_sipm_x = round(Int, sipm.X / sipm.pitch)
+    n_sipm_y = round(Int, sipm.Y / sipm.pitch)
+    for i in 0:n_sipm_x-1
+        for j in 0:n_sipm_y-1
+            sx = i*sipm.pitch + (sipm.pitch - sipm.sipmSize)/2
+            sy = j*sipm.pitch + (sipm.pitch - sipm.sipmSize)/2
+            sensor = Shape([sx, sx+sipm.sipmSize, sx+sipm.sipmSize, sx],
+                           [sy, sy, sy+sipm.sipmSize, sy+sipm.sipmSize])
+
+			# Normalize the intensity to [0,1]
+			norm_int = clamp((mhit[i+1,j+1] - min_INT) / (max_INT - min_INT), 0, 1)
+			col = cgrad(:viridis)[norm_int]
+            plot!(sensor, fillcolor=col, linecolor=:black, lw=1.0, label=false)
+			#println("mhit(($(i+1), $(j+1)) = $(mhit[i+1,j+1])")
+        end
+    end
+
+   p2
+end
+
 """
 Plot the trajectory in the GALA structure
 """
@@ -722,9 +819,9 @@ function p_trajectory(epos::Vector{Float64}, elcc::ELCCGeometry, sipm::SiPMGeome
 		ygs = [step[2] + dice_o[2] for step in gamma]
 	 	zgs = [step[3] + elcc.Zg for step in gamma]
 
-		debug("xgs = $(xgs)")
-		debug("ygs = $(ygs)")
-		debug("zgs = $(zgs)")
+		#debug("xgs = $(xgs)")
+		#debug("ygs = $(ygs)")
+		#debug("zgs = $(zgs)")
 
 		p1 = scatter!(p1, xgs, zgs, ms=1, lc=:green, label=false)
 		p2 = scatter!(p2, ygs, zgs, ms=1, lc=:green, label=false)
@@ -732,9 +829,9 @@ function p_trajectory(epos::Vector{Float64}, elcc::ELCCGeometry, sipm::SiPMGeome
 		p2 = plot!(p2, ygs, zgs, lw=0.5, lc=:green, linestyle=:dashdot, label=false)
 	end
 
-	debug("xs = $(xs)")
-	debug("ys = $(ys)")
-	debug("zs = $(zs)")
+	#debug("xs = $(xs)")
+	#debug("ys = $(ys)")
+	#debug("zs = $(zs)")
 
 	#p1 = plott!(1, p1, trj)
 	#p2 = plott!(2, p2, trj)

@@ -56,41 +56,6 @@ end
 # ╔═╡ eada2802-68a7-4663-a2c0-c1ca41b74601
 jn = ingredients(string(ENV["JNEXT"],"/src/JNEXT.jl"))
 
-# ╔═╡ 279bd076-8960-4f17-b719-f3d985ffdd5c
-md"""
-## Logger
-"""
-
-# ╔═╡ 1046cd03-a4b0-411f-8107-a2d3df10a386
-begin
-	const DEBUG = 10
-	const INFO  = 20
-	const WARN  = 30
-	const ERROR = 40
-	global_log_level = DEBUG
-end
-
-# ╔═╡ aa3b92ad-7fbf-4b3e-9eae-b1e9dcaf2eb4
-begin
-		"Internal function to print message if the given level is >= global level."
-	function log_message(level::Int, level_str::String, msg)
-	    if level >= global_log_level
-	        # Print with a timestamp if desired.
-	        println("[$(level_str)] ", msg)
-	    end
-	end
-
-	"Log a debug message."
-	debug(msg) = log_message(DEBUG, "DEBUG", msg)
-	"Log an info message."
-	info(msg)  = log_message(INFO,  "INFO", msg)
-	"Log a warning message."
-	warn(msg)  = log_message(WARN,  "WARN", msg)
-	"Log an error message."
-	error(msg) = log_message(ERROR, "ERROR", msg)
-
-end
-
 # ╔═╡ 2617ae05-e1db-473a-9b0f-befeea6d0e12
 md"""
 # Simulation
@@ -150,28 +115,30 @@ md"""
 ## ELCC geometry
 """
 
-# ╔═╡ 154133b1-81bd-4bfe-86dc-cb3ccfec48f0
-elcc = jn.JNEXT.GSim.ELCCGeometry(X/mm, Y/mm, Zc/mm, Zg/mm, Za/mm, Zs/mm, Vg/kV, Va/kV, d_hole/mm, pitch/mm)
-
-# ╔═╡ a0dfd610-50ca-4a75-9ab8-8c3937f31c33
-sipm = jn.JNEXT.GSim.SiPMGeometry(sipmXY/mm, sipmPitch/mm, X/mm, Y/mm)
-
 # ╔═╡ dfd7cbf8-adaa-454f-957e-ecc6eee905d3
-jn.JNEXT.GSim.plot_gala_geom(elcc, sipm)
+begin
+	elcc = jn.JNEXT.GSim.ELCCGeometry(X/mm, Y/mm, Zc/mm, Zg/mm, Za/mm, Zs/mm, Vg/kV, Va/kV, d_hole/mm, pitch/mm)
+	
+	sipm = jn.JNEXT.GSim.SiPMGeometry(sipmXY/mm, sipmPitch/mm, X/mm, Y/mm)
+	
+	jn.JNEXT.GSim.plot_gala_geom(elcc, sipm)
+end
 
 # ╔═╡ 16e4221a-4dd8-4571-8ce2-ef259400562a
 begin
 	ndx = jn.JNEXT.GSim.ndicex(elcc)
-	nsi = jn.JNEXT.GSim.nsipmx(sipm)
+	nsix = jn.JNEXT.GSim.nsipmx(sipm)
+	ndy = jn.JNEXT.GSim.ndicey(elcc)
+	nsiy = jn.JNEXT.GSim.nsipmy(sipm)
 md"""
 
-- ELCC structure created with $(ndx) dices and $(nsi) sipms.
+- ELCC structure created with ( $(ndx) x $(ndy)) dices and ( $(nsix), $(nsiy)) sipms.
 """
 end
 
 # ╔═╡ a340f566-c9c0-4293-988e-11b7e69e8e4a
 md"""
-## Trajectories
+## Load trajectories
 """
 
 # ╔═╡ c26b4fc3-3d16-45fc-bffc-934ccfd9deb9
@@ -192,23 +159,11 @@ begin
 	"""
 end
 
+# ╔═╡ 7d32dbb6-04d7-456d-9db8-b4b98ff70de3
+@bind RandomPosition CheckBox()
+
 # ╔═╡ c5924aa7-a04b-4820-aafb-2c71a5bb289d
 @bind SimulatePhotons CheckBox()
-
-# ╔═╡ b4bec083-392c-45f3-b440-91edd3b5e5fc
-#ntop, nbot, sij, gammas = simulate_photons_along_trajectory(electron_pos, tr, elcc, sipm; p1=1.00, p2=0.7, ymm=ymm, samplet=2, keepg=true)
-
-# ╔═╡ 8009f2f9-8931-45f4-9f66-41ea283563a5
-sqrt((3-3.59)^2 + (3-2.894)^2)
-
-# ╔═╡ 61000f02-94cc-46af-bc19-1f331a0d2ecb
-abs(-5.507275344651092e-15) < 1e-16
-
-# ╔═╡ 02ffafb2-8ca6-4fcd-a267-c5e7528137cc
-PyPlot.close("all")
-
-# ╔═╡ e8f9953e-4983-4825-abfa-829653aa0d26
-open_figs = PyPlot.get_fignums()
 
 # ╔═╡ b56be6ba-7e8a-48c2-a2d3-7b4e27e4f03c
 md"""
@@ -238,8 +193,14 @@ end
 
 # ╔═╡ 2273c136-4709-43a6-bf68-1184493fbb70
 begin
-	electron_xy0 = jn.JNEXT.GSim.generate_electron_positions_random(20, 0.0, elcc.X, 0.0, elcc.Y)
-	i = 1 # electron number to run 
+	if RandomPosition
+		electron_xy0 = jn.JNEXT.GSim.generate_electron_positions_random(20, 0.0, elcc.X, 0.0, elcc.Y)
+		i = 1 # electron number to run 
+	else
+		electron_xy0 = jn.JNEXT.GSim.generate_electron_positions(200, 0.0, elcc.X, 0.0, elcc.Y)
+		i = 100 # electron number to run 
+	end
+	
 	electron_pos = electron_xy0[i, :]  
 	md"""
 	#### Generate electron
@@ -256,15 +217,6 @@ dice_i, dice_o, xxlocal = jn.JNEXT.GSim.find_dice(electron_pos, elcc)
 
 # ╔═╡ 33391da0-e8a4-4c3b-ba9e-1d5ca55e69da
 sipm_i, sipm_o =jn.JNEXT.GSim.find_sipm(electron_pos, sipm)
-
-# ╔═╡ 59562b21-4ca8-4404-9f67-22b37c85384a
-begin
-	xsipml = sipm_o[1]
-	ysipmd = sipm_o[2]
-	xdicel = dice_o[1]
-	ydiced = dice_o[2]
-	println(xsipml," ", ysipmd, " ", xdicel, " ", ydiced)
-end
 
 # ╔═╡ ce9fe145-efa7-4421-9c90-1d9ee73c3e1e
 begin 
@@ -300,7 +252,7 @@ typeof(tr)
 
 # ╔═╡ 27669660-d21b-4e10-904d-b8142e8447dd
 if SimulatePhotons
-	ntop, nbot, sij, gammas, jsteps = jn.JNEXT.GSim.simulate_photons_along_trajectory(electron_pos,
+	gcounter, cij, gammas, jsteps = jn.JNEXT.GSim.simulate_photons_along_trajectory(electron_pos,
 		                                                        tr, 
 	                                                            elcc,
 	                                                            sipm; 
@@ -324,14 +276,42 @@ typeof(gammas)
 # ╔═╡ fbf61158-272f-435e-aeba-ace8ee442c71
 jn.JNEXT.GSim.p_trajectory(electron_pos, elcc, sipm, jsteps, gammas)
 
-# ╔═╡ 23167ba6-4ddc-49b8-9aec-b9148d09befc
-gammas
+# ╔═╡ 6dd673b2-1c77-46eb-bf65-375bb11c7c99
+maximum(cij)
+
+# ╔═╡ f0f0f9bb-4c29-4e78-bc92-4a441d99c58b
+jn.JNEXT.GSim.p_hitmatrix(cij, sipm)
+
+# ╔═╡ b5247e3b-1197-4cb2-ad9e-50b4c7fd8c4e
+function getmax(c::AbstractMatrix)
+	max_val, lin_idx = findmax(c)
+	ci = CartesianIndices(size(c))[lin_idx]
+	i, j = Tuple(ci)
+	i,j, max_val
+end
 
 # ╔═╡ ae488bf8-706a-4d57-8ac7-412f0a43bd08
-gamma=gammas[1]
-
-# ╔═╡ e97ec2de-accb-4336-bf0e-2247bbaeb3e2
-gammas
+let
+	eff = gcounter.bottom/gcounter.total
+	ic,jc, cmax = getmax(cij)
+	Qmx = cmax/gcounter.bottom
+	cu =cij[ic,jc+1]
+	cd =cij[ic,jc-1]
+	cr =cij[ic+1,jc]
+	cl =cij[ic-1,jc]
+	Qu = cu/gcounter.bottom
+	Qd = cd/gcounter.bottom
+	Qr = cr/gcounter.bottom
+	Ql = cl/gcounter.bottom
+	md"""
+	- ELCC efficieny = $(float_to_str(eff, "%.2f"))
+	- max signal SiPM: ( $(ic), $(jc)): Qmx = $(float_to_str(Qmx, "%.2f"))
+	- max signal SiPM: ( $(ic), $(jc+1)): Qr = $(float_to_str(Qr, "%.2f"))
+	- max signal SiPM: ( $(ic), $(jc-1)): Ql = $(float_to_str(Ql, "%.2f"))
+	- max signal SiPM: ( $(ic+1), $(jc)): Qu = $(float_to_str(Qu, "%.2f"))
+	- max signal SiPM: ( $(ic-1), $(jc)): Qd = $(float_to_str(Qd, "%.2f"))
+	"""
+end
 
 # ╔═╡ 42d12a7c-e067-4342-860e-ad3530913094
 md"""
@@ -457,21 +437,17 @@ and must satisfy ``z_b \le z(t) \le z_a`` to lie within the finite cylinder.
 # ╠═a333497c-c5fc-49a7-a8ca-d82a7dcd27ad
 # ╠═57248e63-9e36-4644-a6c4-5a3aa1808e29
 # ╠═eada2802-68a7-4663-a2c0-c1ca41b74601
-# ╠═279bd076-8960-4f17-b719-f3d985ffdd5c
-# ╠═1046cd03-a4b0-411f-8107-a2d3df10a386
-# ╠═aa3b92ad-7fbf-4b3e-9eae-b1e9dcaf2eb4
 # ╠═2617ae05-e1db-473a-9b0f-befeea6d0e12
 # ╠═a891cff0-6910-4f78-8fc5-ff4e90163a7e
 # ╠═ac79ab2e-af61-499a-94e7-964a8f04b111
 # ╠═b9df9120-e258-4a63-9dfa-2b0ecf9c5ceb
 # ╠═321fb432-4464-47b8-94ac-30d466670224
-# ╠═154133b1-81bd-4bfe-86dc-cb3ccfec48f0
-# ╠═a0dfd610-50ca-4a75-9ab8-8c3937f31c33
 # ╠═dfd7cbf8-adaa-454f-957e-ecc6eee905d3
 # ╠═16e4221a-4dd8-4571-8ce2-ef259400562a
 # ╠═a340f566-c9c0-4293-988e-11b7e69e8e4a
 # ╠═c26b4fc3-3d16-45fc-bffc-934ccfd9deb9
 # ╠═7c38062b-0671-451c-911e-f88272f97937
+# ╠═7d32dbb6-04d7-456d-9db8-b4b98ff70de3
 # ╠═2273c136-4709-43a6-bf68-1184493fbb70
 # ╠═9eb86c8c-4347-46c4-9111-793f921fac56
 # ╠═ce9fe145-efa7-4421-9c90-1d9ee73c3e1e
@@ -481,22 +457,17 @@ and must satisfy ``z_b \le z(t) \le z_a`` to lie within the finite cylinder.
 # ╠═1ef1b221-da82-4852-bfb3-ffe1b2b50600
 # ╠═c5924aa7-a04b-4820-aafb-2c71a5bb289d
 # ╠═27669660-d21b-4e10-904d-b8142e8447dd
-# ╠═b4bec083-392c-45f3-b440-91edd3b5e5fc
-# ╠═8009f2f9-8931-45f4-9f66-41ea283563a5
-# ╠═61000f02-94cc-46af-bc19-1f331a0d2ecb
 # ╠═10bfa4fb-b245-4467-805e-2ffd9314b58f
 # ╠═1dad2fcb-836e-46a8-bb2b-8d43f25c4767
 # ╠═5b23138d-32e7-4ec1-8032-e00ce1848459
 # ╠═33391da0-e8a4-4c3b-ba9e-1d5ca55e69da
-# ╠═59562b21-4ca8-4404-9f67-22b37c85384a
 # ╠═fbf61158-272f-435e-aeba-ace8ee442c71
-# ╠═23167ba6-4ddc-49b8-9aec-b9148d09befc
+# ╠═6dd673b2-1c77-46eb-bf65-375bb11c7c99
+# ╠═f0f0f9bb-4c29-4e78-bc92-4a441d99c58b
 # ╠═ae488bf8-706a-4d57-8ac7-412f0a43bd08
-# ╠═02ffafb2-8ca6-4fcd-a267-c5e7528137cc
-# ╠═e8f9953e-4983-4825-abfa-829653aa0d26
-# ╠═e97ec2de-accb-4336-bf0e-2247bbaeb3e2
 # ╠═b56be6ba-7e8a-48c2-a2d3-7b4e27e4f03c
 # ╠═c7704f94-2ab5-4111-ac7c-63f978c7ee4c
 # ╠═fcbf9e5a-b7f2-400d-87af-7448fd348071
+# ╠═b5247e3b-1197-4cb2-ad9e-50b4c7fd8c4e
 # ╠═42d12a7c-e067-4342-860e-ad3530913094
 # ╠═569026e1-b82f-4230-b8f5-4fe60afd2cb7
